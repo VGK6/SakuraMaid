@@ -31,7 +31,12 @@ def tts(text, out_path):
     future.result(timeout=30)
 
 # ====== LLM ======
-DEEPSEEK_KEY = "sk-7e384328a74e4cf79f2019524759da99"
+# 从环境变量读取API Key，不要硬编码在代码里！
+import os
+DEEPSEEK_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+if not DEEPSEEK_KEY:
+    print("⚠️ 请设置环境变量 DEEPSEEK_API_KEY")
+    DEEPSEEK_KEY = "YOUR_KEY_HERE"
 def llm(text):
     data = json.dumps({
         "model": "deepseek-v4-flash",
