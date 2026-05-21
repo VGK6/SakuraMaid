@@ -1,61 +1,90 @@
 """
 配置UI — 左侧导航 + 右侧内容面板
+所有配置读写走数据库
 """
 import os, json, sys
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QStackedWidget,
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from modules.database import get_settings, save_setting
+
+from PySide6.QtWidgets import (QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QStackedWidget,
                                QLineEdit, QComboBox, QPushButton, QSlider, QCheckBox,
-                               QGroupBox, QFormLayout, QFileDialog, QListWidget, QListWidgetItem,
-                               QFrame, QSpinBox, QRadioButton)
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QFont, QPixmap, QIcon
+                               QGroupBox, QFormLayout, QFileDialog, QFrame,
+                               QSpinBox, QRadioButton, QMessageBox)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QPixmap
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pet_config.json")
 
-DEFAULT_CFG = {
-    "astrbot_api_key": "abk_pHR4OJsje0xanu0dXxSEGqATFZY_eUNmfPbNyed5EkQ",
-    "astrbot_url": "http://127.0.0.1:6185",
-    "username": "龙之介大人",
-    "tts_enabled": True,
-    "tts_voice": "edge-tts",
-    "character_name": "小女仆",
-    "sound_source": "",
-    "tts_speed": 1.0,
-    "tts_pitch": 0.0,
-    "tts_volume": 80,
-    "tts_emotion": "平静",
-    "llm_mode": "api",
-    "llm_provider": "OpenAI",
-    "llm_api_url": "https://api.deepseek.com/v1/chat/completions",
-    "llm_api_key": "",
-    "llm_model": "deepseek-v4-flash",
-    "llm_local_framework": "llama.cpp",
-    "llm_local_model": "",
-    "llm_context": 4096,
-    "llm_device": "CPU",
-    "tts_mode": "local",
-    "tts_local_model_path": "",
-    "tts_local_device": "CPU",
-    "tts_api_provider": "OpenAI TTS",
-    "tts_api_url": "",
-    "tts_api_key": "",
-    "tts_api_model": "tts-1",
-    "window_x": -1, "window_y": -1,
-    "auto_start": False,
-}
+def db_to_cfg(user_id: int) -> dict:
+    """从数据库读取全部配置"""
+    raw = get_settings(user_id)
+    
+    def g(key, default=""):
+        val = raw.get(key, "")
+        return val if val != "" else default
+    
+    out = {
+        "astrbot_url": g("astrbot.url", "http://127.0.0.1:6185"),
+        "astrbot_api_key": g("astrbot.api_key", ""),
+        "tts_speed": float(g("tts.speed", "1.0")),
+        "tts_pitch": float(g("tts.pitch", "0")),
+        "tts_volume": int(float(g("tts.volume", "80"))),
+        "tts_emotion": g("tts.emotion", "平静"),
+        "tts_voice": g("tts.voice", "默认女声"),
+        "tts_mode": g("tts.mode", "api"),
+        "tts_local_model_path": g("tts.local_model_path", ""),
+        "tts_local_device": g("tts.local_device", "CPU"),
+        "tts_api_provider": g("tts.api_provider", "OpenAI TTS"),
+        "tts_api_url": g("tts.api_url", ""),
+        "tts_api_key": g("tts.api_key", ""),
+        "tts_api_model": g("tts.api_model", "tts-1"),
+        "llm_mode": g("llm.mode", "api"),
+        "llm_framework": g("llm.framework", "llama.cpp"),
+        "llm_local_model": g("llm.local_model", ""),
+        "llm_context": int(g("llm.context", "4096")),
+        "llm_device": g("llm.device", "CPU"),
+        "llm_api_provider": g("llm.api_provider", "OpenAI"),
+        "llm_api_url": g("llm.api_url", ""),
+        "llm_api_key": g("llm.api_key", ""),
+        "llm_api_model": g("llm.api_model", ""),
+        "character_name": g("pet.character", "小女仆"),
+        "sound_source": g("pet.sound_source", ""),
+        "window_x": int(g("window_x", "-1")),
+        "window_y": int(g("window_y", "-1")),
+    }
+    return out
 
-def load_config() -> dict:
-    if os.path.exists(CONFIG_PATH):
-        try:
-            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-                return {**DEFAULT_CFG, **json.load(f)}
-        except:
-            pass
-    return dict(DEFAULT_CFG)
 
-def save_config(cfg: dict):
-    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+def cfg_to_db(user_id: int, cfg: dict):
+    """保存全部配置到数据库"""
+    mapping = [
+        ("astrbot", "url", cfg.get("astrbot_url", "")),
+        ("astrbot", "api_key", cfg.get("astrbot_api_key", "")),
+        ("tts", "speed", str(cfg.get("tts_speed", 1.0))),
+        ("tts", "pitch", str(cfg.get("tts_pitch", 0.0))),
+        ("tts", "volume", str(cfg.get("tts_volume", 80))),
+        ("tts", "emotion", cfg.get("tts_emotion", "平静")),
+        ("tts", "voice", cfg.get("tts_voice", "默认女声")),
+        ("tts", "mode", cfg.get("tts_mode", "api")),
+        ("tts", "local_model_path", cfg.get("tts_local_model_path", "")),
+        ("tts", "local_device", cfg.get("tts_local_device", "CPU")),
+        ("tts", "api_provider", cfg.get("tts_api_provider", "OpenAI TTS")),
+        ("tts", "api_url", cfg.get("tts_api_url", "")),
+        ("tts", "api_key", cfg.get("tts_api_key", "")),
+        ("tts", "api_model", cfg.get("tts_api_model", "tts-1")),
+        ("llm", "mode", cfg.get("llm_mode", "api")),
+        ("llm", "framework", cfg.get("llm_framework", "llama.cpp")),
+        ("llm", "local_model", cfg.get("llm_local_model", "")),
+        ("llm", "context", str(cfg.get("llm_context", 4096))),
+        ("llm", "device", cfg.get("llm_device", "CPU")),
+        ("llm", "api_provider", cfg.get("llm_api_provider", "OpenAI")),
+        ("llm", "api_url", cfg.get("llm_api_url", "")),
+        ("llm", "api_key", cfg.get("llm_api_key", "")),
+        ("llm", "api_model", cfg.get("llm_api_model", "")),
+        ("pet", "character", cfg.get("character_name", "小女仆")),
+        ("pet", "sound_source", cfg.get("sound_source", "")),
+    ]
+    for cat, key, val in mapping:
+        save_setting(user_id, cat, key, val)
 
 
 class NavButton(QPushButton):
@@ -72,10 +101,11 @@ class NavButton(QPushButton):
         """)
 
 
-class ConfigUI(QWidget):
-    def __init__(self):
+class ConfigUI(QDialog):
+    def __init__(self, user: dict = None):
         super().__init__()
-        self.cfg = load_config()
+        self.user = user or {}
+        self.cfg = db_to_cfg(self.user.get('user_id', 0))
         self.accepted = False
         self._init_ui()
 
@@ -88,8 +118,8 @@ class ConfigUI(QWidget):
             QGroupBox { font-weight: bold; border: 1px solid #e0e0e0; border-radius: 8px; 
                        margin-top: 10px; padding: 15px; background: white; }
             QGroupBox::title { color: #ff6b81; subcontrol-origin: margin; left: 12px; font-size: 13px; }
-            QLineEdit, QComboBox { padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; 
-                                  background: white; font-size: 13px; }
+            QLineEdit, QComboBox { padding: 15px 14px; border: 1px solid #ddd; border-radius: 4px; 
+                                  background: white; font-size: 14px; min-height: 32px; }
             QPushButton { padding: 8px 16px; border-radius: 4px; font-size: 13px; 
                          background: #f0f0f0; border: 1px solid #ddd; }
             QPushButton:hover { background: #ff6b81; color: white; border-color: #ff6b81; }
@@ -119,14 +149,18 @@ class ConfigUI(QWidget):
         nav_layout.setContentsMargins(0, 10, 0, 10)
         nav_layout.setSpacing(4)
 
-        # 标题
         title = QLabel("🌸 桌宠配置")
         title.setAlignment(Qt.AlignCenter)
         title.setFont(QFont('Microsoft YaHei', 15, QFont.Bold))
-        title.setStyleSheet("color: #ff6b81; padding: 10px 0 20px 0;")
+        title.setStyleSheet("color: #ff6b81; padding: 10px 0 5px 0;")
         nav_layout.addWidget(title)
 
-        # 导航按钮
+        if self.user:
+            user_label = QLabel(f"👤 {self.user.get('nickname', self.user.get('username',''))}")
+            user_label.setAlignment(Qt.AlignCenter)
+            user_label.setStyleSheet("color: #999; font-size: 12px; padding: 0 0 15px 0;")
+            nav_layout.addWidget(user_label)
+
         self.nav_btns = []
         nav_items = [("🖼️", "桌宠设置", 0), ("⚙️", "系统配置", 1)]
         self.stacked = QStackedWidget()
@@ -138,8 +172,6 @@ class ConfigUI(QWidget):
             nav_layout.addWidget(btn)
 
         nav_layout.addStretch()
-
-        # 版本
         ver = QLabel("v2.0")
         ver.setAlignment(Qt.AlignCenter)
         ver.setStyleSheet("color: #ccc; font-size: 11px; padding: 10px;")
@@ -151,24 +183,20 @@ class ConfigUI(QWidget):
         content_layout = QVBoxLayout(content_panel)
         content_layout.setContentsMargins(20, 15, 20, 15)
 
-        # 页面1: 桌宠设置
         page0 = self._build_pet_page()
         self.stacked.addWidget(page0)
-
-        # 页面2: 系统配置
         page1 = self._build_system_page()
         self.stacked.addWidget(page1)
 
         content_layout.addWidget(self.stacked)
 
-        # 底部按钮
         btn_bar = QHBoxLayout()
         btn_bar.addStretch()
         self.save_btn = QPushButton("✅ 保存")
         self.save_btn.setStyleSheet("background: #ff6b81; color: white; font-size: 14px; padding: 10px 30px; border: none; border-radius: 6px;")
         self.save_btn.clicked.connect(self._on_save)
         cancel_btn = QPushButton("取消")
-        cancel_btn.clicked.connect(self.close)
+        cancel_btn.clicked.connect(self.reject)
         btn_bar.addWidget(self.save_btn)
         btn_bar.addWidget(cancel_btn)
         content_layout.addLayout(btn_bar)
@@ -177,7 +205,6 @@ class ConfigUI(QWidget):
         main_layout.addWidget(content_panel, 1)
         self.setLayout(main_layout)
 
-        # 默认选中第一个
         self.nav_btns[0].setChecked(True)
 
     def _switch_page(self, idx):
@@ -191,13 +218,11 @@ class ConfigUI(QWidget):
         layout = QVBoxLayout(page)
         layout.setSpacing(15)
 
-        # 标题
         title = QLabel("桌宠设置")
         title.setFont(QFont('Microsoft YaHei', 16, QFont.Bold))
         title.setStyleSheet("color: #ff6b81; padding: 0 0 5px 0;")
         layout.addWidget(title)
 
-        # 参考图
         g1 = QGroupBox("桌宠参考图")
         g1_layout = QHBoxLayout()
         preview = QLabel()
@@ -222,49 +247,44 @@ class ConfigUI(QWidget):
         g1.setLayout(g1_layout)
         layout.addWidget(g1)
 
-        # 参考音色参数
         g2 = QGroupBox("参考音色参数")
         g2_layout = QFormLayout()
-        g2_layout.setSpacing(10)
+        g2_layout.setSpacing(14)
 
         self.tts_model_combo = QComboBox()
         self.tts_model_combo.addItems(["默认女声", "默认男声", "自定义"])
         g2_layout.addRow("音色模型:", self.tts_model_combo)
 
-        # 语速
         speed_row = QHBoxLayout()
         self.speed_slider = QSlider(Qt.Horizontal)
         self.speed_slider.setRange(50, 200)
-        self.speed_slider.setValue(int(self.cfg.get("tts_speed", 1.0) * 100))
+        self.speed_slider.setValue(int(float(self.cfg.get("tts_speed", 1.0)) * 100))
         self.speed_label = QLabel(f"{self.cfg.get('tts_speed', 1.0):.1f}x")
         self.speed_slider.valueChanged.connect(lambda v: self.speed_label.setText(f"{v/100:.1f}x"))
         speed_row.addWidget(self.speed_slider)
         speed_row.addWidget(self.speed_label)
         g2_layout.addRow("语速:", speed_row)
 
-        # 音调
         pitch_row = QHBoxLayout()
         self.pitch_slider = QSlider(Qt.Horizontal)
         self.pitch_slider.setRange(-12, 12)
-        self.pitch_slider.setValue(int(self.cfg.get("tts_pitch", 0.0)))
+        self.pitch_slider.setValue(int(float(self.cfg.get("tts_pitch", 0.0))))
         self.pitch_label = QLabel(f"{self.cfg.get('tts_pitch', 0.0):+.1f}")
         self.pitch_slider.valueChanged.connect(lambda v: self.pitch_label.setText(f"{v:+d}"))
         pitch_row.addWidget(self.pitch_slider)
         pitch_row.addWidget(self.pitch_label)
         g2_layout.addRow("音调:", pitch_row)
 
-        # 音量
         vol_row = QHBoxLayout()
         self.vol_slider = QSlider(Qt.Horizontal)
         self.vol_slider.setRange(0, 100)
-        self.vol_slider.setValue(self.cfg.get("tts_volume", 80))
+        self.vol_slider.setValue(int(self.cfg.get("tts_volume", 80)))
         self.vol_label = QLabel(f"{self.cfg.get('tts_volume', 80)}%")
         self.vol_slider.valueChanged.connect(lambda v: self.vol_label.setText(f"{v}%"))
         vol_row.addWidget(self.vol_slider)
         vol_row.addWidget(self.vol_label)
         g2_layout.addRow("音量:", vol_row)
 
-        # 情感
         self.emotion_combo = QComboBox()
         self.emotion_combo.addItems(["平静", "开心", "悲伤", "鼓励"])
         self.emotion_combo.setCurrentText(self.cfg.get("tts_emotion", "平静"))
@@ -294,10 +314,10 @@ class ConfigUI(QWidget):
         title.setStyleSheet("color: #ff6b81; padding: 0 0 5px 0;")
         layout.addWidget(title)
 
-        # AstrBot API
         g1 = QGroupBox("AstrBot API 设置")
         g1_layout = QFormLayout()
-        g1_layout.setSpacing(8)
+        g1_layout.setSpacing(14)
+        g1_layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.api_enable = QCheckBox("启用 API")
         self.api_enable.setChecked(True)
         self.api_url = QLineEdit(self.cfg.get("astrbot_url", "http://127.0.0.1:6185"))
@@ -322,10 +342,8 @@ class ConfigUI(QWidget):
         g1.setLayout(g1_layout)
         layout.addWidget(g1)
 
-        # TTS
         g2 = QGroupBox("TTS 模型设置")
         g2_layout = QVBoxLayout()
-        # 模式选择
         mode_row = QHBoxLayout()
         self.tts_local_radio = QRadioButton("本地")
         self.tts_api_radio = QRadioButton("API")
@@ -370,11 +388,9 @@ class ConfigUI(QWidget):
         self.tts_api_radio.toggled.connect(lambda: self.tts_api_widget.setVisible(self.tts_api_radio.isChecked()))
         self.tts_api_widget.setVisible(self.tts_api_radio.isChecked())
         self.tts_local_widget.setVisible(self.tts_local_radio.isChecked())
-
         g2.setLayout(g2_layout)
         layout.addWidget(g2)
 
-        # LLM
         g3 = QGroupBox("LLM 模型设置")
         g3_layout = QVBoxLayout()
         llm_mode_row = QHBoxLayout()
@@ -397,13 +413,13 @@ class ConfigUI(QWidget):
         llm_local.addRow("后端框架:", self.llm_framework)
         self.llm_local_model = QLineEdit(self.cfg.get("llm_local_model", ""))
         self.llm_local_browse = QPushButton("浏览")
-        llm_local_path = QHBoxLayout()
-        llm_local_path.addWidget(self.llm_local_model)
-        llm_local_path.addWidget(self.llm_local_browse)
-        llm_local.addRow("模型路径:", llm_local_path)
+        llm_local_path_row = QHBoxLayout()
+        llm_local_path_row.addWidget(self.llm_local_model)
+        llm_local_path_row.addWidget(self.llm_local_browse)
+        llm_local.addRow("模型路径:", llm_local_path_row)
         self.llm_context = QSpinBox()
         self.llm_context.setRange(1024, 32768)
-        self.llm_context.setValue(self.cfg.get("llm_context", 4096))
+        self.llm_context.setValue(int(self.cfg.get("llm_context", 4096)))
         self.llm_context.setSingleStep(1024)
         llm_local.addRow("上下文长度:", self.llm_context)
         self.llm_device = QComboBox()
@@ -428,7 +444,6 @@ class ConfigUI(QWidget):
         self.llm_api_radio.toggled.connect(lambda: self.llm_api_widget.setVisible(self.llm_api_radio.isChecked()))
         self.llm_api_widget.setVisible(self.llm_api_radio.isChecked())
         self.llm_local_widget.setVisible(self.llm_local_radio.isChecked())
-
         g3.setLayout(g3_layout)
         layout.addWidget(g3)
 
@@ -448,28 +463,27 @@ class ConfigUI(QWidget):
         try:
             key = self.api_key.text().strip()
             url = self.api_url.text().strip()
+            if not key or not url:
+                QMessageBox.warning(self, "提示", "请先填写API地址和Key")
+                return
             data = json.dumps({"message": "ping", "session_id": "_test"}).encode()
             req = urllib.request.Request(f"{url}/api/v1/chat", data=data,
                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
                 method="POST")
             with urllib.request.urlopen(req, timeout=10) as resp:
-                from PySide6.QtWidgets import QMessageBox
                 QMessageBox.information(self, "连接成功", f"AstrBot API 连接成功!\n状态码: {resp.status}")
         except Exception as e:
-            from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "连接失败", f"无法连接 AstrBot:\n{str(e)[:60]}")
 
     def _on_save(self):
         self.cfg = {
             "astrbot_api_key": self.api_key.text().strip(),
             "astrbot_url": self.api_url.text().strip(),
-            "username": "龙之介大人",
-            "tts_enabled": True,
-            "tts_voice": self.tts_model_combo.currentText(),
             "tts_speed": self.speed_slider.value() / 100,
             "tts_pitch": float(self.pitch_slider.value()),
             "tts_volume": self.vol_slider.value(),
             "tts_emotion": self.emotion_combo.currentText(),
+            "tts_voice": self.tts_model_combo.currentText(),
             "tts_mode": "local" if self.tts_local_radio.isChecked() else "api",
             "tts_local_model_path": self.tts_local_path.text().strip(),
             "tts_local_device": self.tts_local_device.currentText(),
@@ -487,9 +501,16 @@ class ConfigUI(QWidget):
             "llm_api_key": self.llm_api_key.text().strip(),
             "llm_api_model": self.llm_api_model.text().strip(),
             "character_name": "小女仆",
+            "sound_source": "",
             "window_x": -1, "window_y": -1,
-            "auto_start": False,
         }
-        save_config(self.cfg)
+        # 保存到数据库
+        uid = self.user.get('user_id', 0)
+        if uid:
+            cfg_to_db(uid, self.cfg)
         self.accepted = True
-        self.close()
+        self.accept()
+
+    def reject(self):
+        self.accepted = False
+        super().reject()

@@ -224,7 +224,7 @@ class MaidPet(QWidget):
         self._last_mail_count = 0
         self.check_timer = QTimer()
         self.check_timer.timeout.connect(self._periodic_check)
-        self.check_timer.start(60000)
+        self.check_timer.start(30000)  # 每30秒检查一次
 
     def _periodic_check(self):
         threading.Thread(target=self._do_check, daemon=True).start()
@@ -237,6 +237,53 @@ class MaidPet(QWidget):
                 new = len(mails) - self._last_mail_count
                 self._show_bubble(f"📧 {new}封新邮件！", 4000)
             self._last_mail_count = len(mails)
+        except:
+            pass
+        
+        # 检查定时任务
+        try:
+            import json, os
+            from datetime import datetime
+            ASTROB_DB = os.path.expanduser("~") + "/.astrbot/data/data_v4.db"
+            TRIGGER_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cron_trigger.json")
+            
+            # 加载触发记录
+            triggers = {}
+            if os.path.exists(TRIGGER_FILE):
+                try:
+                    with open(TRIGGER_FILE, "r") as f:
+                        triggers = json.load(f)
+                except:
+                    pass
+            
+            import sqlite3
+            conn = sqlite3.connect(ASTROB_DB)
+            c = conn.cursor()
+            c.execute("SELECT name, cron_expression FROM cron_jobs WHERE enabled=1")
+            rows = c.fetchall()
+            conn.close()
+            
+            now = datetime.now()
+            now_key = now.strftime("%Y-%m-%d %H:%M")
+            
+            for name, cron in rows:
+                if "SelfEvolution" in name:
+                    continue
+                if cron:
+                    parts = cron.split()
+                    if len(parts) >= 2:
+                        cron_h, cron_m = parts[1], parts[0]
+                        ch = str(now.hour)
+                        cm = str(now.minute)
+                        if (cron_h == ch or cron_h == "*") and \
+                           (cron_m == cm or cron_m == "*"):
+                            last = triggers.get(name, "")
+                            today = now.strftime("%Y-%m-%d")
+                            if not last.startswith(today):
+                                triggers[name] = now_key
+                                with open(TRIGGER_FILE, "w") as f:
+                                    json.dump(triggers, f)
+                                self._show_bubble(f"⏰ {name}", 5000)
         except:
             pass
 

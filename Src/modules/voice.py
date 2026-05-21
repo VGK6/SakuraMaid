@@ -1,16 +1,26 @@
 """
 语音模块 — TTS合成 + 音频播放
-从pet_config.json读取音色参数
+从数据库读取音色参数
 """
 import os, json, threading, asyncio, tempfile
 
 def _get_cfg():
-    cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "pet_config.json")
     try:
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        from modules.database import get_db_path, ensure_db, get_conn, get_settings
+        db_path = ensure_db()
+        conn = get_conn(db_path)
+        c = conn.cursor()
+        c.execute("SELECT user_id FROM users ORDER BY last_login DESC LIMIT 1")
+        row = c.fetchone()
+        uid = row['user_id'] if row else 0
+        conn.close()
+        if uid:
+            return get_settings(uid)
     except:
-        return {}
+        pass
+    return {}
 
 _tts_loop = None
 
@@ -22,10 +32,8 @@ def _get_loop():
     return _tts_loop
 
 def tts(text: str, out_path: str, voice: str = "zh-CN-XiaoxiaoNeural"):
-    cfg = _get_cfg()
-    speed = cfg.get("tts_speed", 1.0)
-    pitch = cfg.get("tts_pitch", 0.0)
-    volume = cfg.get("tts_volume", 80)
+    raw = _get_cfg()
+    speed = float(raw.get("tts.speed", 1.0))
     import edge_tts
     loop = _get_loop()
     communicate = edge_tts.Communicate(text, voice, rate=f"{int((speed-1)*100):+d}%")

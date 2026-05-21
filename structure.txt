@@ -7,7 +7,13 @@ Maid_deskpet3/
 │
 ├── SakMaienv/                   # Python虚拟环境
 │
+├── SakuraMaid_DB.s3db           # 用户数据库(运行后生成)
+│
 ├── requirements.txt             # Python依赖列表
+│
+├── 桌宠开发方案.md               # 开发规划文档
+│
+├── structure.txt                # 本文件 - 项目结构说明
 │
 ├── 桌宠开发方案.md               # 开发规划文档
 │
@@ -28,6 +34,7 @@ Maid_deskpet3/
 │   │
 │   ├── modules/                 # 功能模块
 │   │   ├── __init__.py
+│   │   ├── database.py          # SQLite数据库(用户/配置持久化)
 │   │   ├── voice.py             # TTS语音合成(edge-tts)
 │   │   ├── llm_client.py        # DeepSeek LLM客户端(备用)
 │   │   ├── astrbot_client.py    # AstrBot API客户端(主要)
@@ -38,6 +45,7 @@ Maid_deskpet3/
 │   │
 │   ├── ui/                      # 界面模块
 │   │   ├── __init__.py
+│   │   ├── login_ui.py          # 登录/注册界面
 │   │   └── config_ui.py         # 配置UI(左侧导航+右侧面板)
 │   │                            # 桌宠设置页: 参考图/音色参数
 │   │                            # 系统配置页: AstrBot/TTS/LLM

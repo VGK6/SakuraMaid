@@ -1,15 +1,30 @@
 """
-AstrBot API 客户端 — 从pet_config.json读取配置
+AstrBot API 客户端 — 从数据库读取配置
 """
 import os, json, urllib.request
 
 def _get_cfg():
-    cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "pet_config.json")
     try:
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        from modules.database import get_db_path, ensure_db, get_conn, get_settings
+        db_path = ensure_db()
+        conn = get_conn(db_path)
+        c = conn.cursor()
+        c.execute("SELECT last_insert_rowid()")  # dummy
+        # 获取最后登录用户的user_id
+        try:
+            c.execute("SELECT user_id FROM users ORDER BY last_login DESC LIMIT 1")
+            row = c.fetchone()
+            uid = row['user_id'] if row else 0
+        except:
+            uid = 0
+        conn.close()
+        if uid:
+            return get_settings(uid)
     except:
-        return {}
+        pass
+    return {}
 
 API_KEY = ""
 BASE_URL = "http://127.0.0.1:6185"
@@ -17,12 +32,13 @@ TIMEOUT = 30
 
 def _reload():
     global API_KEY, BASE_URL, TIMEOUT
-    cfg = _get_cfg()
-    API_KEY = cfg.get("astrbot_api_key", os.environ.get("ASTRBOT_API_KEY", ""))
-    BASE_URL = cfg.get("astrbot_url", "http://127.0.0.1:6185")
-    TIMEOUT = cfg.get("api_timeout", 30)
-
-_reload()
+    raw = _get_cfg()
+    API_KEY = raw.get("astrbot.api_key", os.environ.get("ASTRBOT_API_KEY", ""))
+    BASE_URL = raw.get("astrbot.url", "http://127.0.0.1:6185")
+    try:
+        TIMEOUT = 30
+    except:
+        pass
 
 def chat(message: str, session_id: str = "maid_pet", username: str = "龙之介大人") -> str:
     _reload()
