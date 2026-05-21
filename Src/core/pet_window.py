@@ -17,8 +17,9 @@ from modules.config_store import load as load_cfg, save as save_cfg
 from modules.scheduler import get_schedule, get_unread_mail
 
 class MaidPet(QWidget):
-    def __init__(self):
+    def __init__(self, config: dict = None):
         super().__init__()
+        self.user_cfg = config or {}
         self.monitor = SystemMonitor()
         self.hand = VirtualHand()
         self._init_window()
