@@ -1,0 +1,52 @@
+============================================================
+  樱花庄小女仆 · 桌宠项目结构
+  最后更新: 2026-05-21
+============================================================
+
+Maid_deskpet3/
+│
+├── SakMaienv/                   # Python虚拟环境
+│
+├── requirements.txt             # Python依赖列表
+│
+├── 桌宠开发方案.md               # 开发规划文档
+│
+├── pet_config.json              # 用户配置文件(运行后生成)
+│
+├── structure.txt                # 本文件 - 项目结构说明
+│
+├── Src/                         # 源代码目录
+│   │
+│   ├── main.py                  # 入口: 配置UI → 桌宠
+│   │
+│   ├── core/                    # 核心模块
+│   │   ├── __init__.py
+│   │   ├── config.py            # 路径/常量配置
+│   │   ├── pet_window.py        # 桌宠主窗口(QWidget)
+│   │   ├── animation.py         # 序列帧动画管理器
+│   │   └── bubble.py            # 气泡对话框渲染
+│   │
+│   ├── modules/                 # 功能模块
+│   │   ├── __init__.py
+│   │   ├── voice.py             # TTS语音合成(edge-tts)
+│   │   ├── llm_client.py        # DeepSeek LLM客户端(备用)
+│   │   ├── astrbot_client.py    # AstrBot API客户端(主要)
+│   │   ├── system_monitor.py    # 系统监控(CPU/内存/磁盘)
+│   │   ├── virtual_hand.py      # 虚拟手(鼠标键盘模拟)
+│   │   ├── config_store.py      # 配置持久化
+│   │   └── scheduler.py         # 日程/邮件轮询
+│   │
+│   ├── ui/                      # 界面模块
+│   │   ├── __init__.py
+│   │   └── config_ui.py         # 配置UI(左侧导航+右侧面板)
+│   │                            # 桌宠设置页: 参考图/音色参数
+│   │                            # 系统配置页: AstrBot/TTS/LLM
+│   │
+│   └── plugins/                 # 插件目录(预留)
+│
+└── resourses/                   # 资源目录
+    ├── example/                 # 素材(角色图/视频)
+    ├── behaviors/               # 动作序列帧
+    │   └── Hello/               # 挥手动作(10帧)
+    └── voices/                  # 音频资源
+        └── voice_characters_set/ # 声音角色配置
