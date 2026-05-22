@@ -15,6 +15,8 @@ from modules.system_monitor import SystemMonitor
 from modules.virtual_hand import VirtualHand
 from modules.config_store import load as load_cfg, save as save_cfg
 from modules.scheduler import get_schedule, get_unread_mail
+from modules.speech_recognition import listen, is_listening
+from modules.action_engine import ActionEngine
 
 class MaidPet(QWidget):
     def __init__(self, config: dict = None):
@@ -22,6 +24,7 @@ class MaidPet(QWidget):
         self.user_cfg = config or {}
         self.monitor = SystemMonitor()
         self.hand = VirtualHand()
+        self.action_engine = ActionEngine()
         self._init_window()
         self._load_resources()
         self._init_state()
@@ -133,7 +136,7 @@ class MaidPet(QWidget):
 
         # 气泡
         if self.bubble_text:
-            self.bubble.draw(p, self.bubble_text, WIN_W, 0)
+            self.bubble.draw(p, self.bubble_text, WIN_W, 60)
 
     # ── 交互 ──
 
@@ -180,7 +183,7 @@ class MaidPet(QWidget):
         self.drag = False
 
     def mouseDoubleClickEvent(self, e):
-        self._chat()
+        self._start_voice_input()
 
     def enterEvent(self, e):
         if self.state == 'idle' and self.anim.has_frames('hello'):
@@ -195,11 +198,13 @@ class MaidPet(QWidget):
         tray_menu.addAction("🌸 显示", self.show)
         tray_menu.addAction("🙈 隐藏", self.hide)
         tray_menu.addSeparator()
-        tray_menu.addAction("📋 查看日程", self._show_schedule)
-        tray_menu.addAction("📧 查看邮件", self._show_mail)
+        tray_menu.addAction("🎤 语音输入", self._start_voice_input)
+        tray_menu.addAction("💬 文字对话", self._chat)
+        tray_menu.addSeparator()
+        tray_menu.addAction("⚙️ 设置", self._open_settings)
         tray_menu.addAction("🛡️ 系统检查", self._run_system_check)
         tray_menu.addSeparator()
-        tray_menu.addAction("🚪 退出", QApplication.quit)
+        tray_menu.addAction("❌ 退出", QApplication.quit)
         self.tray.setContextMenu(tray_menu)
         self.tray.show()
 
@@ -218,6 +223,83 @@ class MaidPet(QWidget):
         else:
             msg += chr(10) + "✅ 一切正常"
         self._show_bubble(msg, 5000)
+
+    def _start_voice_input(self):
+        """启动语音输入"""
+        if is_listening():
+            self._show_bubble("🎤 正在录音中...", 2000)
+            return
+        self._show_bubble("🎤 聆听中，请说话...", 3000)
+        threading.Thread(target=self._do_voice_input, daemon=True).start()
+
+    def _open_settings(self):
+        """打开配置界面"""
+        QTimer.singleShot(0, self._do_open_settings)
+
+    def _do_open_settings(self):
+        from ui.config_ui import ConfigUI, db_to_cfg
+        self.hide()
+        cfg_ui = ConfigUI(user={"user_id": 0, "username": "龙之介大人"})
+        if cfg_ui.exec() == ConfigUI.Accepted:
+            self.show()
+        else:
+            self.show()
+
+    def _do_voice_input(self):
+        # 先显示麦克风信息
+        from modules.speech_recognition import list_devices, get_default_device
+        try:
+            default = get_default_device()
+            print(f"🎤 麦克风: {default['name']}")
+        except:
+            pass
+
+        self._show_bubble("🎤 聆听中，说完会自动停止...", 0)
+        text = listen(timeout=10.0, silence_limit=2.0)
+        
+        self._clear_bubble()
+        
+        if not text:
+            self._show_bubble("😶 没听清，双击再试一次？", 2500)
+            return
+        self._show_bubble(f"🎤 {text}", 3000)
+        # 判断是否为操作指令
+        action_keywords = ["打开", "关闭", "点击", "输入", "搜索", "滚动", "下载", "启动", "创建", "删除", "复制", "粘贴"]
+        is_action = any(k in text for k in action_keywords)
+        
+        if is_action:
+            self._show_bubble("🤔 正在分析并执行...", 2000)
+            threading.Thread(target=self._do_action, args=(text,), daemon=True).start()
+        else:
+            # 普通对话
+            from modules.astrbot_client import chat
+            reply = chat(text)
+            if reply:
+                self._show_bubble(reply, 5000)
+                from modules.voice import speak
+                speak(reply)
+
+    def _do_action(self, instruction: str):
+        """执行操作指令"""
+        result = self.action_engine.execute(instruction)
+        if result["success"]:
+            msg = f"✅ 完成! {result['summary']}"
+        else:
+            msg = f"❌ 失败: {result.get('error', '未知错误')}"
+        self._show_bubble(msg, 5000)
+        from modules.voice import speak
+        speak(msg)
+
+    def _start_action_mode(self):
+        """启动自动执行模式（语音输入→动作）"""
+        self._show_bubble("🤖 请说出要执行的操作", 3000)
+        threading.Thread(target=self._do_action_voice, daemon=True).start()
+
+    def _do_action_voice(self):
+        text = listen(timeout=8.0)
+        if text:
+            self._show_bubble(f"🤖 {text}", 2000)
+            self._do_action(text)
 
     def _init_checker(self):
         """定时检查日程和邮件"""
@@ -309,12 +391,11 @@ class MaidPet(QWidget):
 
     def _show_menu(self, pos):
         m = QMenu(self)
-        m.addAction("👋 打招呼", self._greet)
+        m.addAction("🎤 语音输入", self._start_voice_input)
         m.addAction("💬 说句话", self._chat)
-        m.addAction("🛡️ 系统检查", self._run_system_check)
         m.addSeparator()
-        m.addAction("😊 开心", lambda: self._show_bubble("嘿嘿~(*^▽^*)"))
-        m.addAction("📋 关于", lambda: self._show_bubble("樱花庄小女仆 v1.0"))
+        m.addAction("🛡️ 系统检查", self._run_system_check)
+        m.addAction("⚙️ 设置", self._open_settings)
         m.addSeparator()
         m.addAction("🚪 退出", QApplication.quit)
         m.exec(self.mapToGlobal(pos))

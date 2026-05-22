@@ -155,11 +155,12 @@ class ConfigUI(QDialog):
         title.setStyleSheet("color: #ff6b81; padding: 10px 0 5px 0;")
         nav_layout.addWidget(title)
 
+        # 用户信息 + 登出
         if self.user:
-            user_label = QLabel(f"👤 {self.user.get('nickname', self.user.get('username',''))}")
-            user_label.setAlignment(Qt.AlignCenter)
-            user_label.setStyleSheet("color: #999; font-size: 12px; padding: 0 0 15px 0;")
-            nav_layout.addWidget(user_label)
+            user_btn = QPushButton(f"👤 {self.user.get('nickname', self.user.get('username',''))}  ▼")
+            user_btn.setStyleSheet("text-align: center; padding: 8px; border: none; color: #999; font-size: 12px; background: transparent;")
+            user_btn.clicked.connect(self._logout)
+            nav_layout.addWidget(user_btn)
 
         self.nav_btns = []
         nav_items = [("🖼️", "桌宠设置", 0), ("⚙️", "系统配置", 1)]
@@ -190,7 +191,11 @@ class ConfigUI(QDialog):
 
         content_layout.addWidget(self.stacked)
 
+        # 跳过配置 + 按钮
         btn_bar = QHBoxLayout()
+        self.skip_cfg_cb = QCheckBox("跳过配置，直接启动")
+        self.skip_cfg_cb.setStyleSheet("font-size: 13px; color: #999;")
+        btn_bar.addWidget(self.skip_cfg_cb)
         btn_bar.addStretch()
         self.save_btn = QPushButton("✅ 保存")
         self.save_btn.setStyleSheet("background: #ff6b81; color: white; font-size: 14px; padding: 10px 30px; border: none; border-radius: 6px;")
@@ -384,6 +389,21 @@ class ConfigUI(QDialog):
         tts_api.addRow("模型名:", self.tts_api_model)
         g2_layout.addWidget(self.tts_api_widget)
 
+        # ── 音量调节 ──
+        vol_group = QGroupBox("音量试听")
+        vol_layout = QFormLayout(vol_group)
+        vol_layout.setSpacing(10)
+        self.vol_slider = QSlider(Qt.Horizontal)
+        self.vol_slider.setRange(0, 100)
+        self.vol_slider.setValue(int(self.cfg.get("tts_volume", 80)))
+        self.vol_value_label = QLabel(f"{self.vol_slider.value()}%")
+        vol_slider_row = QHBoxLayout()
+        vol_slider_row.addWidget(self.vol_slider)
+        vol_slider_row.addWidget(self.vol_value_label)
+        vol_layout.addRow("音量:", vol_slider_row)
+        self.vol_slider.valueChanged.connect(self._on_vol_changed)
+        g2_layout.addWidget(vol_group)
+
         self.tts_local_radio.toggled.connect(lambda: self.tts_local_widget.setVisible(self.tts_local_radio.isChecked()))
         self.tts_api_radio.toggled.connect(lambda: self.tts_api_widget.setVisible(self.tts_api_radio.isChecked()))
         self.tts_api_widget.setVisible(self.tts_api_radio.isChecked())
@@ -459,7 +479,7 @@ class ConfigUI(QDialog):
                 self.char_preview.setText("")
 
     def _test_api(self):
-        import urllib.request
+        import urllib.request, json
         try:
             key = self.api_key.text().strip()
             url = self.api_url.text().strip()
@@ -471,9 +491,34 @@ class ConfigUI(QDialog):
                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
                 method="POST")
             with urllib.request.urlopen(req, timeout=10) as resp:
-                QMessageBox.information(self, "连接成功", f"AstrBot API 连接成功!\n状态码: {resp.status}")
+                QMessageBox.information(self, "连接成功", f"AstrBot API 连接成功! 状态码: {resp.status}")
         except Exception as e:
-            QMessageBox.warning(self, "连接失败", f"无法连接 AstrBot:\n{str(e)[:60]}")
+            QMessageBox.warning(self, "连接失败", f"无法连接 AstrBot: {str(e)[:60]}")
+
+    def _on_vol_changed(self, val):
+        self.vol_value_label.setText(f"{val}%")
+        import threading, os, tempfile
+        def play():
+            try:
+                import sys
+                sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+                from modules.voice import tts_local
+                import soundfile as sf, sounddevice as sd
+                tmp = os.path.join(tempfile.gettempdir(), "vol_test.wav")
+                if tts_local("这个音量大小合适吗", tmp):
+                    data, sr = sf.read(tmp)
+                    adj = data * (val / 100.0)
+                    sd.play(adj, sr)
+                    sd.wait()
+            except:
+                pass
+        threading.Thread(target=play, daemon=True).start()
+
+    def _logout(self):
+        """登出并清除会话"""
+        from ui.login_ui import clear_session
+        clear_session()
+        self.reject()
 
     def _on_save(self):
         self.cfg = {

@@ -5,13 +5,13 @@ from PySide6.QtCore import QRect
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPainterPath
 
 class BubbleRenderer:
-    MAX_WIDTH = 220
+    MAX_WIDTH = 160  # 窗口宽200，留边距
 
     def draw(self, p: QPainter, text: str, parent_w: int, anchor_y: int):
         if not text:
             return
 
-        font = QFont('Microsoft YaHei', 11)
+        font = QFont('Microsoft YaHei', 10)
         p.setFont(font)
         fm = QFontMetrics(font)
 
@@ -27,10 +27,14 @@ class BubbleRenderer:
         if line:
             lines.append(line)
 
-        lh = fm.height() + 4
-        bw, bh = self.MAX_WIDTH + 20, len(lines) * lh + 20
+        lh = fm.height() + 3
+        bw = self.MAX_WIDTH + 16
+        bh = len(lines) * lh + 14
         bx = (parent_w - bw) // 2
-        by = anchor_y - bh - 5
+        # 气泡在anchor_y上方，但如果超出窗口顶部则下移
+        by = anchor_y - bh - 6
+        if by < 2:
+            by = 2
 
         # 气泡背景
         path = QPainterPath()
