@@ -33,8 +33,8 @@ TIMEOUT = 30
 def _reload():
     global API_KEY, BASE_URL, TIMEOUT
     raw = _get_cfg()
-    API_KEY = raw.get("astrbot.api_key", os.environ.get("ASTRBOT_API_KEY", ""))
-    BASE_URL = raw.get("astrbot.url", "http://127.0.0.1:6185")
+    API_KEY = raw.get("astrbot.api_key") or os.environ.get("ASTRBOT_API_KEY", "")
+    BASE_URL = raw.get("astrbot.url") or "http://127.0.0.1:6185"
     try:
         TIMEOUT = 30
     except:

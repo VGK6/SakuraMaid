@@ -70,8 +70,8 @@ def tts_edge(text: str, out_path: str, voice: str = "zh-CN-XiaoxiaoNeural", spee
         print(f"TTS在线合成失败: {e}")
         return False
 
-def speak(text: str, use_local: bool = True, sid: int = 0) -> bool:
-    """语音播报，优先本地，失败自动切换在线"""
+def speak(text: str, use_local: bool = True, sid: int = 0) -> float:
+    """语音播报，返回音频时长(秒)，失败返回0"""
     try:
         tmp = os.path.join(tempfile.gettempdir(), "pet_tts.wav")
         
@@ -79,23 +79,23 @@ def speak(text: str, use_local: bool = True, sid: int = 0) -> bool:
         if use_local and _get_local_tts() is not None:
             ok = tts_local(text, tmp, sid=sid)
             if ok:
-                _play(tmp)
-                return True
+                return _play(tmp)
         
         # 回退在线
         ok = tts_edge(text, tmp)
         if ok:
-            _play(tmp)
-            return True
+            return _play(tmp)
     except Exception as e:
         print(f"语音播报失败: {e}")
-    return False
+    return 0
 
-def _play(path: str):
+def _play(path: str) -> float:
     import soundfile as sf, sounddevice as sd
     data, sr = sf.read(path)
+    duration = len(data) / sr
     sd.play(data, sr)
     sd.wait()
+    return duration
 
 def get_local_voices() -> list:
     """获取本地VITS可用音色列表"""

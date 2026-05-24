@@ -1,59 +1,84 @@
 """
-气泡渲染 - 对话框绘制
+气泡渲染 - 独立窗口模式（左上角，连接线指向角色）
 """
-from PySide6.QtCore import QRect
-from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPainterPath
+from PySide6.QtWidgets import QLabel, QFrame, QVBoxLayout
+from PySide6.QtCore import Qt, QTimer, QPoint
+from PySide6.QtGui import QFont, QPainter, QColor, QPen
 
-class BubbleRenderer:
-    MAX_WIDTH = 160  # 窗口宽200，留边距
+class BubbleWindow(QFrame):
+    """独立的半透明气泡窗口，带连接线指向桌宠"""
 
-    def draw(self, p: QPainter, text: str, parent_w: int, anchor_y: int):
-        if not text:
-            return
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 240);
+                border: 1px solid #ffb6c1;
+                border-radius: 10px;
+                padding: 6px;
+            }
+            QLabel {
+                color: #333;
+                font-size: 13px;
+                background: transparent;
+                padding: 2px;
+            }
+        """)
 
-        font = QFont('Microsoft YaHei', 10)
-        p.setFont(font)
-        fm = QFontMetrics(font)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        self.label = QLabel()
+        self.label.setWordWrap(True)
+        self.label.setMaximumWidth(180)
+        self.label.setFont(QFont('Microsoft YaHei', 11))
+        layout.addWidget(self.label)
 
-        # 自动换行
-        lines, line = [], ""
-        for ch in text:
-            t = line + ch
-            if fm.horizontalAdvance(t) > self.MAX_WIDTH:
-                lines.append(line)
-                line = ch
-            else:
-                line = t
-        if line:
-            lines.append(line)
+        self._timer = QTimer()
+        self._timer.timeout.connect(self.hide)
+        self._parent_pos = QPoint(0, 0)
 
-        lh = fm.height() + 3
-        bw = self.MAX_WIDTH + 16
-        bh = len(lines) * lh + 14
-        bx = (parent_w - bw) // 2
-        # 气泡在anchor_y上方，但如果超出窗口顶部则下移
-        by = anchor_y - bh - 6
-        if by < 2:
-            by = 2
+    def show_text(self, text: str, duration_ms: int = 3000, parent_pos: QPoint = None):
+        self.label.setText(text)
+        self.adjustSize()
 
-        # 气泡背景
-        path = QPainterPath()
-        path.addRoundedRect(bx, by, bw, bh, 10, 10)
-        p.fillPath(path, QColor(255, 255, 255, 235))
-        p.setPen(QColor(200, 200, 200))
-        p.drawPath(path)
+        if parent_pos:
+            self._parent_pos = parent_pos
+            # 气泡在桌宠左上方
+            bw = self.width()
+            bh = self.height()
+            px, py = parent_pos.x(), parent_pos.y()
+            # 气泡定位：(桌宠x - 气泡宽 - 10, 桌宠y - 10)
+            bx = px - bw - 10
+            by = py - 10
+            self.move(bx, by)
 
-        # 三角尾巴
-        cx, cy = parent_w // 2, by + bh
-        tri = QPainterPath()
-        tri.moveTo(cx - 6, cy)
-        tri.lineTo(cx, cy + 8)
-        tri.lineTo(cx + 6, cy)
-        tri.closeSubpath()
-        p.fillPath(tri, QColor(255, 255, 255, 235))
-        p.drawPath(tri)
+        self.show()
+        self.raise_()
+        self.update()  # 触发paintEvent画连接线
 
-        # 文字
-        p.setPen(QColor(50, 50, 50))
-        for i, l in enumerate(lines):
-            p.drawText(bx + 10, by + 14 + i * lh, l)
+        if duration_ms > 0:
+            self._timer.start(duration_ms)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        # 画连接线：从气泡右下角到桌宠左上角
+        if self.isVisible():
+            p = QPainter(self)
+            p.setRenderHint(QPainter.Antialiasing)
+            pen = QPen(QColor(255, 182, 193, 180), 2)
+            p.setPen(pen)
+
+            # 气泡右下角
+            x1 = self.width()
+            y1 = self.height()
+            # 桌宠左上角（相对气泡坐标）
+            px, py = self._parent_pos.x(), self._parent_pos.y()
+            x2 = px - self.x()
+            y2 = py - self.y()
+
+            p.drawLine(x1, y1, x2, y2)
+            # 小圆点装饰在桌宠端
+            p.setBrush(QColor(255, 182, 193, 180))
+            p.drawEllipse(QPoint(x2, y2), 3, 3)

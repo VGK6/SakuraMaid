@@ -1,14 +1,14 @@
 """
 主窗口 - 桌宠渲染与交互
 """
-import os, math, time, threading
+import os, math, time, threading, queue
 from PySide6.QtWidgets import QApplication, QWidget, QMenu, QSystemTrayIcon
-from PySide6.QtCore import Qt, QTimer, QRect
+from PySide6.QtCore import Qt, QTimer, QRect, QThread
 from PySide6.QtGui import QPixmap, QPainter, QColor, QFont
 
 from core.config import *
 from core.animation import AnimationManager
-from core.bubble import BubbleRenderer
+from core.bubble import BubbleWindow
 from modules.voice import speak
 from modules.llm_client import chat
 from modules.system_monitor import SystemMonitor
@@ -17,6 +17,8 @@ from modules.config_store import load as load_cfg, save as save_cfg
 from modules.scheduler import get_schedule, get_unread_mail
 from modules.speech_recognition import listen, is_listening
 from modules.action_engine import ActionEngine
+from modules.hotkey import register_hotkey
+from core.bubble import BubbleWindow
 
 class MaidPet(QWidget):
     def __init__(self, config: dict = None):
@@ -25,6 +27,14 @@ class MaidPet(QWidget):
         self.monitor = SystemMonitor()
         self.hand = VirtualHand()
         self.action_engine = ActionEngine()
+        self._bubble_queue = queue.Queue()  # 跨线程气泡队列
+        self._bubble_win = BubbleWindow(self)  # 独立气泡窗口
+        # 注册全局快捷键 Ctrl+Shift+V
+        try:
+            from PySide6.QtWidgets import QApplication
+            register_hotkey(QApplication.instance(), self._start_voice_input)
+        except Exception as e:
+            print(f"快捷键注册失败: {e}")
         self._init_window()
         self._load_resources()
         self._init_state()
@@ -68,7 +78,7 @@ class MaidPet(QWidget):
             self.char_pix = self.char_pix.scaled(140, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
         # 气泡
-        self.bubble = BubbleRenderer()
+        self._bubble_win = BubbleWindow(self)  # 独立气泡窗口
 
     def _init_state(self):
         self.state = 'idle'
@@ -100,6 +110,14 @@ class MaidPet(QWidget):
                 self.frame_idx = 0
 
         self.update()
+
+        # 处理跨线程气泡请求
+        try:
+            while True:
+                text, dur = self._bubble_queue.get_nowait()
+                self._show_bubble(text, dur)
+        except queue.Empty:
+            pass
 
     # ── 绘制 ──
 
@@ -134,9 +152,7 @@ class MaidPet(QWidget):
             p.setPen(QColor(150, 150, 150))
         p.drawText(QRect(WIN_W - 30, 5, 25, 20), Qt.AlignCenter, status_dot)
 
-        # 气泡
-        if self.bubble_text:
-            self.bubble.draw(p, self.bubble_text, WIN_W, 60)
+        # 气泡改为独立窗口BubbleWindow，不再在窗口内绘制
 
     # ── 交互 ──
 
@@ -163,12 +179,20 @@ class MaidPet(QWidget):
             self._show_bubble(f"⚠️ {str(e)[:30]}")
 
     def _show_bubble(self, text, duration=3000):
+        """线程安全的气泡显示（独立窗口）"""
+        if QThread.currentThread() is not QApplication.instance().thread():
+            self._bubble_queue.put((text, duration))
+            return
+        if text == "__clear__":
+            self._bubble_win.hide()
+            return
         self.bubble_text = text
-        self.update()
+        self._bubble_win.show_text(text, duration, self.pos())
         QTimer.singleShot(duration, self._clear_bubble)
 
     def _clear_bubble(self):
         self.bubble_text = ""
+        self._bubble_win.hide()
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
@@ -225,11 +249,11 @@ class MaidPet(QWidget):
         self._show_bubble(msg, 5000)
 
     def _start_voice_input(self):
-        """启动语音输入"""
+        """启动语音输入（可从任意线程安全调用）"""
         if is_listening():
-            self._show_bubble("🎤 正在录音中...", 2000)
+            self._bubble_queue.put(("🎤 正在录音中...", 2000))
             return
-        self._show_bubble("🎤 聆听中，请说话...", 3000)
+        self._bubble_queue.put(("🎤 聆听中，说完会自动停止...", 0))
         threading.Thread(target=self._do_voice_input, daemon=True).start()
 
     def _open_settings(self):
@@ -262,7 +286,7 @@ class MaidPet(QWidget):
         if not text:
             self._show_bubble("😶 没听清，双击再试一次？", 2500)
             return
-        self._show_bubble(f"🎤 {text}", 3000)
+        
         # 判断是否为操作指令
         action_keywords = ["打开", "关闭", "点击", "输入", "搜索", "滚动", "下载", "启动", "创建", "删除", "复制", "粘贴"]
         is_action = any(k in text for k in action_keywords)
@@ -275,9 +299,17 @@ class MaidPet(QWidget):
             from modules.astrbot_client import chat
             reply = chat(text)
             if reply:
-                self._show_bubble(reply, 5000)
-                from modules.voice import speak
-                speak(reply)
+                self._show_bubble(reply, 15000)  # 先显示15秒
+                def _speak_and_sync():
+                    dur = speak(reply)
+                    if dur > 0:
+                        # 语音播完，延后1秒清除气泡
+                        import time
+                        time.sleep(1)
+                        self._bubble_queue.put(("__clear__", 0))
+                    else:
+                        self._bubble_queue.put(("__clear__", 5000))
+                threading.Thread(target=_speak_and_sync, daemon=True).start()
 
     def _do_action(self, instruction: str):
         """执行操作指令"""
@@ -286,7 +318,8 @@ class MaidPet(QWidget):
             msg = f"✅ 完成! {result['summary']}"
         else:
             msg = f"❌ 失败: {result.get('error', '未知错误')}"
-        self._show_bubble(msg, 5000)
+        dur = max(4000, min(10000, len(msg) * 120))
+        self._show_bubble(msg, dur)
         from modules.voice import speak
         speak(msg)
 

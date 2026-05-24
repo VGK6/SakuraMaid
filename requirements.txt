@@ -9,3 +9,5 @@ Pillow>=10.0.0
 requests>=2.31.0
 vosk>=0.3.45
 sherpa-onnx>=1.10.0
+keyboard>=0.13.5
+pynput>=1.7.6
