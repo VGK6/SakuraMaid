@@ -19,6 +19,7 @@ from modules.speech_recognition import listen, is_listening
 from modules.action_engine import ActionEngine
 from modules.hotkey import register_hotkey
 from core.bubble import BubbleWindow
+from modules.vision import describe_screen, describe_image, is_available
 
 class MaidPet(QWidget):
     def __init__(self, config: dict = None):
@@ -225,6 +226,8 @@ class MaidPet(QWidget):
         tray_menu.addAction("🎤 语音输入", self._start_voice_input)
         tray_menu.addAction("💬 文字对话", self._chat)
         tray_menu.addSeparator()
+        tray_menu.addAction("📷 看看屏幕", self._look_screen)
+        tray_menu.addSeparator()
         tray_menu.addAction("⚙️ 设置", self._open_settings)
         tray_menu.addAction("🛡️ 系统检查", self._run_system_check)
         tray_menu.addSeparator()
@@ -271,7 +274,7 @@ class MaidPet(QWidget):
 
     def _do_voice_input(self):
         # 先显示麦克风信息
-        from modules.speech_recognition import list_devices, get_default_device
+        from modules.speech_recognition import list_devices, get_default_device, test_mic
         try:
             default = get_default_device()
             print(f"🎤 麦克风: {default['name']}")
@@ -287,7 +290,23 @@ class MaidPet(QWidget):
             self._show_bubble("😶 没听清，双击再试一次？", 2500)
             return
         
-        # 判断是否为操作指令
+        # 判断指令类型
+        text_lower = text.lower()
+        
+        # 看看屏幕（直接调用llava）
+        if "看看" in text and ("屏幕" in text or "桌面" in text or "显示" in text):
+            self._show_bubble("📷 正在查看屏幕...", 3000)
+            threading.Thread(target=self._do_look_screen, daemon=True).start()
+            return
+        
+        # 查看图片
+        if "看到" in text or "这是" in text or "图片" in text:
+            from modules.vision import describe_screen
+            self._show_bubble("📷 正在看...", 3000)
+            threading.Thread(target=lambda: self._do_look_screen(), daemon=True).start()
+            return
+        
+        # 操作指令 → 动作引擎（自动截图+llava分析）
         action_keywords = ["打开", "关闭", "点击", "输入", "搜索", "滚动", "下载", "启动", "创建", "删除", "复制", "粘贴"]
         is_action = any(k in text for k in action_keywords)
         
@@ -327,6 +346,18 @@ class MaidPet(QWidget):
         """启动自动执行模式（语音输入→动作）"""
         self._show_bubble("🤖 请说出要执行的操作", 3000)
         threading.Thread(target=self._do_action_voice, daemon=True).start()
+
+    def _look_screen(self):
+        """看看屏幕上有什么"""
+        self._show_bubble("📷 正在查看屏幕...", 3000)
+        threading.Thread(target=self._do_look_screen, daemon=True).start()
+
+    def _do_look_screen(self):
+        try:
+            result = describe_screen()
+            self._show_bubble(f"📷 {result[:100]}", 5000)
+        except Exception as e:
+            self._show_bubble(f"📷 分析失败: {str(e)[:30]}", 3000)
 
     def _do_action_voice(self):
         text = listen(timeout=8.0)

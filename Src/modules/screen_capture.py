@@ -22,9 +22,11 @@ class ScreenCapture:
         return np.array(self.screenshot())
 
     def save_screenshot(self, path: str = None) -> str:
-        """截图并保存到文件"""
+        """截图并保存到文件（默认存到项目temp目录）"""
         if path is None:
-            path = os.path.join(os.path.expanduser("~"), "Desktop", "screenshot.png")
+            temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "resourses", "temp")
+            os.makedirs(temp_dir, exist_ok=True)
+            path = os.path.join(temp_dir, "screenshot.png")
         self.screenshot().save(path)
         return path
 

@@ -2,7 +2,7 @@
 动作引擎 — 桌宠的"大脑"
 观察屏幕 → LLM分析 → 自动生成动作 → 执行
 """
-import json, time, base64, os
+import json, time, base64, os, tempfile
 from io import BytesIO
 
 class ActionEngine:
@@ -26,26 +26,38 @@ class ActionEngine:
     def execute(self, task: str) -> dict:
         """
         执行用户任务的主入口
-        流程: 截图 → LLM分析 → 生成动作序列 → 执行 → 反馈
+        流程: 截图 → llva分析 → LLM决策 → 执行 → 反馈
         """
         if not self.virtual_hand or not self.screen:
             return {"success": False, "error": "模块未初始化"}
 
-        # 第一步: 观察当前环境
-        screenshot_path = self.screen.save_screenshot()
+        # 第一步: 截图到资源目录temp
+        temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                                "resourses", "temp")
+        os.makedirs(temp_dir, exist_ok=True)
+        screenshot_path = os.path.join(temp_dir, "screen_shot.png")
+        self.screen.save_screenshot(screenshot_path)
+        
         win_info = self.screen.get_active_window_info()
+        
+        # 第二步: 用llava详细分析屏幕内容
         screen_desc = self._describe_screen(screenshot_path)
 
-        # 第二步: 让LLM决策
+        # 第三步: 让LLM决策（包含屏幕描述）
         plan = self._plan_actions(task, screen_desc, win_info)
+
+        # 清理截图
+        try:
+            os.remove(screenshot_path)
+        except:
+            pass
 
         if not plan.get("actions"):
             return {"success": False, "error": plan.get("error", "LLM无法生成动作计划")}
 
-        # 第三步: 执行动作序列
+        # 第四步: 执行动作序列
         results = self._execute_plan(plan["actions"])
 
-        # 第四步: 验证结果
         success = all(r.get("success") for r in results)
 
         return {
@@ -56,15 +68,21 @@ class ActionEngine:
         }
 
     def _describe_screen(self, screenshot_path: str) -> str:
-        """分析屏幕内容（后续可接入llava进行详细描述）"""
+        """用llava分析屏幕内容"""
+        try:
+            from modules.vision import describe_image
+            result = describe_image(screenshot_path)
+            if result and not result.startswith("llava调用失败"):
+                return result
+        except:
+            pass
+        # 回退：简单描述
         try:
             from PIL import Image
             img = Image.open(screenshot_path)
-            w, h = img.size
-            # 简单描述：尺寸+主色调+窗口信息
             win = self.screen.get_active_window_info()
             color = self.screen.get_foreground_color()
-            return f"屏幕 {w}x{h}, {color}色调, 当前窗口: {win['title']}"
+            return f"屏幕 {img.size[0]}x{img.size[1]}, {color}色调, 当前窗口: {win['title']}"
         except:
             return "无法分析屏幕"
 
