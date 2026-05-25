@@ -1,6 +1,6 @@
 ============================================================
   樱花庄小女仆 · 桌宠项目结构
-  最后更新: 2026-05-24
+  最后更新: 2026-05-25
 ============================================================
 
 Maid_deskpet3/
@@ -34,19 +34,28 @@ Maid_deskpet3/
 │   ├── modules/                 # 功能模块
 │   │   ├── __init__.py
 │   │   ├── database.py          # SQLite数据库 (WAL模式)
-│   │   ├── voice.py             # TTS语音合成(本地sherpa-onnx+在线edge-tts)
+│   │   ├── voice.py             # TTS语音合成(优先FishSpeech API→本地→在线)
 │   │   ├── speech_recognition.py # 语音识别(sense-voice, PyAudio)
 │   │   ├── vision.py            # 视觉理解(llava看图/屏幕分析)
-│   │   ├── fish_tts.py          # FishSpeech音色克隆客户端(独立环境)
+│   │   ├── fish_tts.py          # FishSpeech API音色克隆客户端
 │   │   ├── screen_capture.py    # 屏幕捕获(pyautogui+PIL)
-│   │   ├── action_engine.py     # 动作引擎(llva看图→LLM规划→执行)
+│   │   ├── action_engine.py     # 动作引擎(llava看图→LLM规划→执行)
 │   │   ├── hotkey.py            # 全局快捷键(Ctrl+Shift+V, WinAPI)
 │   │   ├── astrbot_client.py    # AstrBot API客户端(主要)
 │   │   ├── llm_client.py        # DeepSeek LLM客户端(备用)
 │   │   ├── system_monitor.py    # 系统监控(CPU/内存/磁盘)
 │   │   ├── virtual_hand.py      # 虚拟手(鼠标键盘模拟)
 │   │   ├── config_store.py      # 配置持久化
-│   │   └── scheduler.py         # 日程/邮件轮询
+│   │   ├── scheduler.py         # 日程/邮件轮询
+│   │   │
+│   │   └── self_evolution/      # 自我进化系统
+│   │       ├── __init__.py
+│   │       ├── design.md        # 完整设计文档
+│   │       ├── skill_registry.py # 技能注册表(CRUD+匹配+评分)
+│   │       ├── atomic_skills.py  # 原子技能库(预置基础技能)
+│   │       ├── skill_executor.py # 安全执行引擎(沙盒+扫描)
+│   │       ├── skill_generator.py # LLM技能生成器
+│   │       └── error_healer.py   # 错误诊疗室(自修复)
 │   │
 │   ├── ui/                      # 界面模块
 │   │   ├── __init__.py
@@ -54,6 +63,7 @@ Maid_deskpet3/
 │   │   └── config_ui.py         # 配置UI(左侧导航+右侧面板)
 │   │                            # 桌宠设置页: 参考图/音色参数
 │   │                            # 系统配置页: AstrBot/TTS/LLM/音量
+│   │                            # 技能管理页: 查看/启用/禁用/删除技能
 │   │
 │   └── plugins/                 # 插件目录(预留)
 │

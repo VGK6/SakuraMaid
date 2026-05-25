@@ -1,0 +1,30 @@
+# 环境
+SakMaienv/
+FishEnv/
+
+# 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 数据库（用户数据）
+*.s3db
+*.db
+
+# 运行生成
+session.json
+cron_trigger.json
+last_email_check.json
+
+# 系统
+.vs/
+*.suo
+*.user
+*.log
+
+# 资源中的模型文件
+resourses/models/vosk/*.mdl
+resourses/models/vosk/*.fst
+
+# 截图
+resourses/temp/

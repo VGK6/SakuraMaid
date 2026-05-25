@@ -71,22 +71,36 @@ def tts_edge(text: str, out_path: str, voice: str = "zh-CN-XiaoxiaoNeural", spee
         return False
 
 def speak(text: str, use_local: bool = True, sid: int = 0) -> float:
-    """语音播报，返回音频时长(秒)，失败返回0"""
+    """语音播报: FishSpeech API音色克隆 → 本地VITS → edge-tts"""
+    # 1. FishSpeech API (音色克隆)
+    try:
+        ref = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "resourses", "voices", "voice_characters_set", "maid_sounds_cha.wav")
+        if os.path.exists(ref):
+            from modules.fish_tts import speak as fs_speak, is_available
+            if is_available() and fs_speak(text, ref):
+                return len(text) * 0.12
+    except:
+        pass
+    
+    # 2. 本地VITS
     try:
         tmp = os.path.join(tempfile.gettempdir(), "pet_tts.wav")
-        
-        # 尝试本地
         if use_local and _get_local_tts() is not None:
             ok = tts_local(text, tmp, sid=sid)
             if ok:
                 return _play(tmp)
-        
-        # 回退在线
+    except:
+        pass
+    
+    # 3. edge-tts在线
+    try:
+        tmp = os.path.join(tempfile.gettempdir(), "pet_tts.wav")
         ok = tts_edge(text, tmp)
         if ok:
             return _play(tmp)
-    except Exception as e:
-        print(f"语音播报失败: {e}")
+    except:
+        pass
     return 0
 
 def _play(path: str) -> float:

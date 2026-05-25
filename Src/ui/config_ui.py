@@ -163,7 +163,7 @@ class ConfigUI(QDialog):
             nav_layout.addWidget(user_btn)
 
         self.nav_btns = []
-        nav_items = [("🖼️", "桌宠设置", 0), ("⚙️", "系统配置", 1)]
+        nav_items = [("🖼️", "桌宠设置", 0), ("⚙️", "系统配置", 1), ("🧠", "技能管理", 2)]
         self.stacked = QStackedWidget()
 
         for icon, text, idx in nav_items:
@@ -173,7 +173,7 @@ class ConfigUI(QDialog):
             nav_layout.addWidget(btn)
 
         nav_layout.addStretch()
-        ver = QLabel("v2.0")
+        ver = QLabel("v1测试版")
         ver.setAlignment(Qt.AlignCenter)
         ver.setStyleSheet("color: #ccc; font-size: 11px; padding: 10px;")
         nav_layout.addWidget(ver)
@@ -188,6 +188,8 @@ class ConfigUI(QDialog):
         self.stacked.addWidget(page0)
         page1 = self._build_system_page()
         self.stacked.addWidget(page1)
+        page2 = self._build_skill_page()
+        self.stacked.addWidget(page2)
 
         content_layout.addWidget(self.stacked)
 
@@ -469,6 +471,100 @@ class ConfigUI(QDialog):
 
         layout.addStretch()
         return page
+
+    def _build_skill_page(self):
+        """技能管理页面"""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setSpacing(12)
+
+        title = QLabel("🧠 技能管理")
+        title.setFont(QFont('Microsoft YaHei', 16, QFont.Bold))
+        title.setStyleSheet("color: #ff6b81; padding: 0 0 5px 0;")
+        layout.addWidget(title)
+
+        desc = QLabel("管理桌宠已学会的自定义技能")
+        desc.setStyleSheet("color: #999; font-size: 12px; padding-bottom: 10px;")
+        layout.addWidget(desc)
+
+        # 技能列表
+        from modules.self_evolution.skill_registry import SkillRegistry
+        reg = SkillRegistry()
+        skills = reg.list_all(enabled_only=False)
+
+        if not skills:
+            no_skill = QLabel("📭 暂无已注册的技能")
+            no_skill.setAlignment(Qt.AlignCenter)
+            no_skill.setStyleSheet("color: #bbb; font-size: 14px; padding: 40px;")
+            layout.addWidget(no_skill)
+        else:
+            for s in skills:
+                skill_box = QFrame()
+                skill_box.setStyleSheet("QFrame { background: white; border: 1px solid #eee; border-radius: 8px; padding: 10px; margin: 2px; }")
+                box_layout = QVBoxLayout(skill_box)
+
+                # 标题行
+                name_row = QHBoxLayout()
+                name_label = QLabel(f"{'🟢' if s['enabled'] else '🔴'} {s['name']}")
+                name_label.setFont(QFont('Microsoft YaHei', 12, QFont.Bold))
+                name_label.setStyleSheet("color: #333;")
+                name_row.addWidget(name_label)
+
+                score = s['health_score']
+                score_label = QLabel(f"评分: {score:.0f}" if score else "新技能")
+                score_label.setStyleSheet(f"color: {'#4CAF50' if score > 60 else '#FF9800' if score > 30 else '#f44336'}; font-size: 11px;")
+                name_row.addWidget(score_label)
+                name_row.addStretch()
+
+                ver_label = QLabel(f"v{s['version']}")
+                ver_label.setStyleSheet("color: #bbb; font-size: 10px;")
+                name_row.addWidget(ver_label)
+                box_layout.addLayout(name_row)
+
+                # 关键词
+                kw_label = QLabel(f"触发: {s['trigger_keywords']}")
+                kw_label.setStyleSheet("color: #999; font-size: 11px;")
+                box_layout.addWidget(kw_label)
+
+                # 操作按钮
+                btn_row = QHBoxLayout()
+                toggle_btn = QPushButton("禁用" if s['enabled'] else "启用")
+                toggle_btn.setFixedWidth(50)
+                toggle_btn.clicked.connect(lambda checked, sid=s['id'], en=s['enabled']: self._toggle_skill(sid, not en))
+                del_btn = QPushButton("删除")
+                del_btn.setStyleSheet("color: #f44336;")
+                del_btn.setFixedWidth(50)
+                del_btn.clicked.connect(lambda checked, sid=s['id']: self._delete_skill(sid))
+                btn_row.addWidget(toggle_btn)
+                btn_row.addWidget(del_btn)
+                btn_row.addStretch()
+                box_layout.addLayout(btn_row)
+
+                layout.addWidget(skill_box)
+
+        layout.addStretch()
+        return page
+
+    def _toggle_skill(self, skill_id: int, enabled: bool):
+        from modules.self_evolution.skill_registry import SkillRegistry
+        reg = SkillRegistry()
+        reg.update(skill_id, enabled=1 if enabled else 0)
+        # 刷新页面
+        self.stacked.removeWidget(self.stacked.widget(2))
+        self.stacked.insertWidget(2, self._build_skill_page())
+        self.stacked.setCurrentIndex(2)
+
+    def _delete_skill(self, skill_id: int):
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(self, "确认删除", "确定要删除这个技能吗？",
+                                     QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            from modules.self_evolution.skill_registry import SkillRegistry
+            reg = SkillRegistry()
+            reg.delete(skill_id)
+            self.stacked.removeWidget(self.stacked.widget(2))
+            self.stacked.insertWidget(2, self._build_skill_page())
+            self.stacked.setCurrentIndex(2)
 
     def _pick_image(self):
         path, _ = QFileDialog.getOpenFileName(self, "选择桌宠参考图", "", "图片 (*.png *.jpg *.gif)")

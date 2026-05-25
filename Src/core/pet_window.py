@@ -9,21 +9,25 @@ from PySide6.QtGui import QPixmap, QPainter, QColor, QFont
 from core.config import *
 from core.animation import AnimationManager
 from core.bubble import BubbleWindow
-from modules.voice import speak
-from modules.llm_client import chat
-from modules.system_monitor import SystemMonitor
-from modules.virtual_hand import VirtualHand
 from modules.config_store import load as load_cfg, save as save_cfg
-from modules.scheduler import get_schedule, get_unread_mail
-from modules.speech_recognition import listen, is_listening
-from modules.action_engine import ActionEngine
-from modules.hotkey import register_hotkey
-from core.bubble import BubbleWindow
-from modules.vision import describe_screen, describe_image, is_available
+
+# ── 以下模块按需加载（延迟导入，降低启动内存） ──
+# 使用方式: from modules.xxx import yyy 移到具体方法内部
+# speak, chat, SystemMonitor, VirtualHand, listen, is_listening,
+# ActionEngine, register_hotkey, describe_screen 等均延迟加载
 
 class MaidPet(QWidget):
     def __init__(self, config: dict = None):
         super().__init__()
+        from modules.system_monitor import SystemMonitor
+        from modules.virtual_hand import VirtualHand
+        from modules.action_engine import ActionEngine
+        from modules.hotkey import register_hotkey
+        from modules.voice import speak
+        from modules.llm_client import chat
+        from modules.speech_recognition import listen, is_listening
+        from modules.scheduler import get_schedule, get_unread_mail
+        
         self.user_cfg = config or {}
         self.monitor = SystemMonitor()
         self.hand = VirtualHand()
@@ -161,6 +165,7 @@ class MaidPet(QWidget):
         self.state = 'hello'
         self.frame_idx = 0
         self._show_bubble("龙之介大人，欢迎回来~🌸")
+        from modules.voice import speak
         threading.Thread(target=lambda: speak("龙之介大人，欢迎回来~"), daemon=True).start()
 
     def _chat(self):
@@ -314,21 +319,48 @@ class MaidPet(QWidget):
             self._show_bubble("🤔 正在分析并执行...", 2000)
             threading.Thread(target=self._do_action, args=(text,), daemon=True).start()
         else:
-            # 普通对话
-            from modules.astrbot_client import chat
-            reply = chat(text)
-            if reply:
-                self._show_bubble(reply, 15000)  # 先显示15秒
-                def _speak_and_sync():
-                    dur = speak(reply)
-                    if dur > 0:
-                        # 语音播完，延后1秒清除气泡
-                        import time
-                        time.sleep(1)
-                        self._bubble_queue.put(("__clear__", 0))
-                    else:
-                        self._bubble_queue.put(("__clear__", 5000))
-                threading.Thread(target=_speak_and_sync, daemon=True).start()
+            # 自我进化：尝试技能匹配
+            self._try_self_evolution(text)
+
+    def _try_self_evolution(self, text: str):
+        """尝试用自我进化系统处理指令"""
+        from modules.self_evolution import SelfEvolution
+        se = SelfEvolution()
+        result = se.process(text)
+        
+        if result["action"] == "execute":
+            msg = result.get("message", "")
+            self._show_bubble(msg, 8000)
+            from modules.voice import speak
+            threading.Thread(target=lambda: speak(msg), daemon=True).start()
+            
+        elif result["action"] == "confirm":
+            self._show_bubble(f"🧠 {result.get('message', '需要确认')}", 5000)
+            
+        elif result["action"] == "error":
+            self._show_bubble(f"⚠️ {result.get('message', '处理失败')}", 5000)
+            # 回退到普通对话
+            self._do_chat_fallback(text)
+            
+        else:
+            # 无匹配 → 普通对话
+            self._do_chat_fallback(text)
+
+    def _do_chat_fallback(self, text: str):
+        """回退到普通对话"""
+        from modules.astrbot_client import chat
+        reply = chat(text)
+        if reply:
+            self._show_bubble(reply, 15000)
+            def _speak_and_sync():
+                dur = speak(reply)
+                if dur > 0:
+                    import time
+                    time.sleep(1)
+                    self._bubble_queue.put(("__clear__", 0))
+                else:
+                    self._bubble_queue.put(("__clear__", 5000))
+            threading.Thread(target=_speak_and_sync, daemon=True).start()
 
     def _do_action(self, instruction: str):
         """执行操作指令"""

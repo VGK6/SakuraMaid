@@ -115,7 +115,7 @@ class LoginUI(QDialog):
         self.is_register = False
         layout.addStretch()
 
-        ver = QLabel("v2.0")
+        ver = QLabel("v1测试版")
         ver.setAlignment(Qt.AlignCenter)
         ver.setStyleSheet("color: #ccc; font-size: 11px;")
         layout.addWidget(ver)
