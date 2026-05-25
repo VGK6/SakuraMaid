@@ -40,6 +40,11 @@ class MaidPet(QWidget):
             register_hotkey(QApplication.instance(), self._start_voice_input)
         except Exception as e:
             print(f"快捷键注册失败: {e}")
+
+        # 启动桌宠主动能力引擎 (定时器+环境感知+异常检测)
+        from modules.proactive_engine import ProactiveEngine
+        self.proactive = ProactiveEngine(self)
+        self.proactive.start()
         self._init_window()
         self._load_resources()
         self._init_state()
