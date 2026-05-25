@@ -1,0 +1,9 @@
+{
+  "character_name": "小女仆",
+  "voice_file": "maid_sounds_cha.wav",
+  "description": "樱花庄102号房的小女仆AI声音",
+  "source": "从maid_functions.mp4提取并AI分离人声",
+  "sample_rate": 44100,
+  "channels": 1,
+  "format": "wav"
+}
