@@ -37,7 +37,7 @@ Maid_deskpet3/
 │   │   ├── voice.py             # TTS语音合成(优先FishSpeech API→本地→在线)
 │   │   ├── speech_recognition.py # 语音识别(sense-voice, PyAudio)
 │   │   ├── vision.py            # 视觉理解(llava看图/屏幕分析)
-│   │   ├── fish_tts.py          # FishSpeech API音色克隆客户端
+│   │   ├── minimax_tts.py         # MiniMax TTS API音色克隆客户端
 │   │   ├── screen_capture.py    # 屏幕捕获(pyautogui+PIL)
 │   │   ├── action_engine.py     # 动作引擎(llava看图→LLM规划→执行)
 │   │   ├── hotkey.py            # 全局快捷键(Ctrl+Shift+V, WinAPI)

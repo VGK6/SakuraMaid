@@ -119,8 +119,8 @@ def speak(text: str, lang: str = "auto", use_local: bool = True, sid: int = 0) -
     try:
         ref = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                           "resourses", "voices", "voice_characters_set", "maid_sounds_cha.wav")
-        from modules.fish_tts import speak as fs_speak, is_available
-        if is_available() and os.path.exists(ref) and fs_speak(text, ref):
+        from modules.minimax_tts import speak as mini_speak, is_available
+        if is_available() and os.path.exists(ref) and mini_speak(text, ref):
             return len(text) * 0.12
     except:
         pass
