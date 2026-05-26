@@ -166,6 +166,10 @@ class MaidPet(QWidget):
 
     # ── 交互 ──
 
+    def _get_voice_lang(self) -> str:
+        """获取用户设置的语音语种"""
+        return self.user_cfg.get("voice_lang", "auto") if self.user_cfg else "auto"
+
     def _greet(self):
         self.state = 'hello'
         self.frame_idx = 0
@@ -185,7 +189,7 @@ class MaidPet(QWidget):
         try:
             reply = chat("你好~")
             self._show_bubble(f"💬 {reply}")
-            threading.Thread(target=lambda: speak(reply), daemon=True).start()
+            threading.Thread(target=lambda: speak(reply, lang=self._get_voice_lang()), daemon=True).start()
         except Exception as e:
             self._show_bubble(f"⚠️ {str(e)[:30]}")
 
@@ -337,7 +341,7 @@ class MaidPet(QWidget):
             msg = result.get("message", "")
             self._show_bubble(msg, 8000)
             from modules.voice import speak
-            threading.Thread(target=lambda: speak(msg), daemon=True).start()
+            threading.Thread(target=lambda: speak(msg, lang=self._get_voice_lang()), daemon=True).start()
             
         elif result["action"] == "confirm":
             self._show_bubble(f"🧠 {result.get('message', '需要确认')}", 5000)
@@ -358,7 +362,7 @@ class MaidPet(QWidget):
         if reply:
             self._show_bubble(reply, 15000)
             def _speak_and_sync():
-                dur = speak(reply)
+                dur = speak(reply, lang=self._get_voice_lang())
                 if dur > 0:
                     import time
                     time.sleep(1)
@@ -377,7 +381,7 @@ class MaidPet(QWidget):
         dur = max(4000, min(10000, len(msg) * 120))
         self._show_bubble(msg, dur)
         from modules.voice import speak
-        speak(msg)
+        speak(msg, lang=self._get_voice_lang())
 
     def _start_action_mode(self):
         """启动自动执行模式（语音输入→动作）"""

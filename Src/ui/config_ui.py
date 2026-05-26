@@ -29,6 +29,9 @@ def db_to_cfg(user_id: int) -> dict:
         "tts_pitch": float(g("tts.pitch", "0")),
         "tts_volume": int(float(g("tts.volume", "80"))),
         "tts_emotion": g("tts.emotion", "平静"),
+        "tts_lang": g("tts.lang", "auto"),
+        "voice_lang": g("voice.lang", "auto"),
+        "bubble_lang": g("bubble.lang", "auto"),
         "tts_voice": g("tts.voice", "默认女声"),
         "tts_mode": g("tts.mode", "api"),
         "tts_local_model_path": g("tts.local_model_path", ""),
@@ -63,6 +66,9 @@ def cfg_to_db(user_id: int, cfg: dict):
         ("tts", "pitch", str(cfg.get("tts_pitch", 0.0))),
         ("tts", "volume", str(cfg.get("tts_volume", 80))),
         ("tts", "emotion", cfg.get("tts_emotion", "平静")),
+        ("tts", "lang", cfg.get("tts_lang", "auto")),
+        ("voice", "lang", cfg.get("voice_lang", "auto")),
+        ("bubble", "lang", cfg.get("bubble_lang", "auto")),
         ("tts", "voice", cfg.get("tts_voice", "默认女声")),
         ("tts", "mode", cfg.get("tts_mode", "api")),
         ("tts", "local_model_path", cfg.get("tts_local_model_path", "")),
@@ -296,6 +302,27 @@ class ConfigUI(QDialog):
         self.emotion_combo.addItems(["平静", "开心", "悲伤", "鼓励"])
         self.emotion_combo.setCurrentText(self.cfg.get("tts_emotion", "平静"))
         g2_layout.addRow("情感:", self.emotion_combo)
+
+        # 语种选择（语音播报用）
+        self.voice_lang_combo = QComboBox()
+        self.voice_lang_combo.addItems(["自动检测", "中文", "日文", "英文"])
+        lang_map = {"自动检测": "auto", "中文": "zh", "日文": "ja", "英文": "en"}
+        current_vlang = self.cfg.get("voice_lang", "auto")
+        for i in range(self.voice_lang_combo.count()):
+            if lang_map[self.voice_lang_combo.itemText(i)] == current_vlang:
+                self.voice_lang_combo.setCurrentIndex(i)
+                break
+        g2_layout.addRow("语音语种:", self.voice_lang_combo)
+
+        # 气泡语种（显示用）
+        self.bubble_lang_combo = QComboBox()
+        self.bubble_lang_combo.addItems(["自动检测", "中文", "日文", "英文"])
+        current_blang = self.cfg.get("bubble_lang", "auto")
+        for i in range(self.bubble_lang_combo.count()):
+            if lang_map[self.bubble_lang_combo.itemText(i)] == current_blang:
+                self.bubble_lang_combo.setCurrentIndex(i)
+                break
+        g2_layout.addRow("气泡语种:", self.bubble_lang_combo)
 
         btn_row = QHBoxLayout()
         self.test_btn = QPushButton("🎧 试听示例")
@@ -624,6 +651,9 @@ class ConfigUI(QDialog):
             "tts_pitch": float(self.pitch_slider.value()),
             "tts_volume": self.vol_slider.value(),
             "tts_emotion": self.emotion_combo.currentText(),
+            "tts_lang": {"自动检测": "auto", "中文": "zh", "日文": "ja", "英文": "en"}.get(self.voice_lang_combo.currentText(), "auto"),
+            "voice_lang": {"自动检测": "auto", "中文": "zh", "日文": "ja", "英文": "en"}.get(self.voice_lang_combo.currentText(), "auto"),
+            "bubble_lang": {"自动检测": "auto", "中文": "zh", "日文": "ja", "英文": "en"}.get(self.bubble_lang_combo.currentText(), "auto"),
             "tts_voice": self.tts_model_combo.currentText(),
             "tts_mode": "local" if self.tts_local_radio.isChecked() else "api",
             "tts_local_model_path": self.tts_local_path.text().strip(),

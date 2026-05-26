@@ -40,6 +40,18 @@ class BubbleWindow(QFrame):
         self._parent_pos = QPoint(0, 0)
 
     def show_text(self, text: str, duration_ms: int = 3000, parent_pos: QPoint = None):
+        # 根据语种切换字体
+        import re
+        if re.search(r'[\u3040-\u309f\u30a0-\u30ff]', text):
+            # 日文 → Yu Gothic UI
+            self.label.setFont(QFont('Yu Gothic UI', 11))
+        elif re.search(r'[\u4e00-\u9fff]', text):
+            # 中文 → Microsoft YaHei
+            self.label.setFont(QFont('Microsoft YaHei', 11))
+        else:
+            # 英文 → Segoe UI
+            self.label.setFont(QFont('Segoe UI', 11))
+
         self.label.setText(text)
         self.adjustSize()
 

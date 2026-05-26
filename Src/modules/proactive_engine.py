@@ -14,6 +14,7 @@ class ProactiveEngine:
         self._done_today = set()
         self._last_activity_time = time.time()
         self._last_cpu_warn = 0
+        self.camera = None  # 摄像头（懒加载）
 
     def start(self):
         if self._running:
@@ -146,16 +147,42 @@ class ProactiveEngine:
     # ═══════════════════════════════════════
 
     def _check_environment(self, now):
-        """环境感知：深夜提醒 + 无操作检测"""
+        """环境感知：摄像头+深夜提醒+无操作检测"""
         h = now.hour
 
-        # 深夜检测 (0:00~5:00 还在电脑前)
-        if 0 <= h <= 5:
-            # 每小时提醒一次
-            if self._mark_done("late_night", now.strftime("%Y-%m-%d"), now):
-                msg = f"🌙 已经{now.hour}点多了，还不休息吗？熬夜对身体不好哦~"
-                self._bubble(msg, 8000)
-                self._speak(msg)
+        # 摄像头场景感知
+        try:
+            if self.camera is None:
+                from modules.camera_env import CameraEnv
+                try:
+                    self.camera = CameraEnv()
+                    # 测试能否捕获
+                    test = self.camera.capture()
+                    if test is None:
+                        self.camera = None
+                        print("⚠️ 摄像头不可用，跳过环境感知")
+                except:
+                    self.camera = None
+            
+            scene = self.camera.get_scene()
+            
+            if scene.get("camera_ok"):
+                # 深夜+有人 → 休息提醒
+                if 0 <= h <= 5 and scene["face_count"] > 0:
+                    if self._mark_done("late_night", now.strftime("%Y-%m-%d"), now):
+                        msg = f"🌙 已经{now.hour}点多了，还不休息吗？熬夜对身体不好哦~"
+                        self._bubble(msg, 8000)
+                        self._speak(msg)
+                
+                # 多人在场（未实装安静模式，先做检测）
+                if scene["face_count"] >= 2:
+                    pass  # 预留：切换安静模式
+                
+                # 检测到人+运动 → 记录活动
+                if scene["face_count"] > 0 or scene["has_motion"]:
+                    self._last_activity_time = time.time()
+        except Exception as e:
+            print(f"环境感知异常: {e}")
 
         # 长时间无操作检测 (2小时)
         idle_time = time.time() - self._last_activity_time

@@ -41,6 +41,7 @@ Maid_deskpet3/
 │   │   ├── screen_capture.py    # 屏幕捕获(pyautogui+PIL)
 │   │   ├── action_engine.py     # 动作引擎(llava看图→LLM规划→执行)
 │   │   ├── hotkey.py            # 全局快捷键(Ctrl+Shift+V, WinAPI)
+│   │   ├── camera_env.py         # 环境感知(OpenCV摄像头+人脸检测)
 │   │   ├── proactive_engine.py  # 主动能力引擎(定时器+环境感知+异常检测)
 │   ├── pet_timer.py         # 桌宠定时器(已整合到proactive_engine)
 │   ├── astrbot_client.py    # AstrBot API客户端(主要)
