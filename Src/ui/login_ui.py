@@ -48,36 +48,37 @@ class LoginUI(QDialog):
         self.setMinimumSize(360, 480)
         self.setStyleSheet("""
             QWidget { background: #fef6f7; font-family: Microsoft YaHei; }
-            QLineEdit { padding: 22px 20px; border: 1px solid #ffb6c1; border-radius: 8px; 
-                       background: white; font-size: 16px; min-height: 40px; }
+            QLineEdit { padding: 14px 16px; border: 1px solid #ffb6c1; border-radius: 8px; 
+                       background: white; font-size: 15px; min-height: 24px; }
             QPushButton { padding: 14px; border-radius: 8px; font-size: 15px; font-weight: bold; }
             QCheckBox { spacing: 8px; font-size: 14px; color: #666; }
         """)
 
         layout = QVBoxLayout()
-        layout.setSpacing(12)
-        layout.setContentsMargins(40, 25, 40, 25)
+        layout.setSpacing(10)
+        layout.setContentsMargins(35, 20, 35, 20)
 
         icon = QLabel("🌸")
         icon.setAlignment(Qt.AlignCenter)
-        icon.setFont(QFont('Microsoft YaHei', 48))
+        icon.setFont(QFont('Microsoft YaHei', 40))
         layout.addWidget(icon)
 
         title = QLabel("樱花庄小女仆")
         title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont('Microsoft YaHei', 20, QFont.Bold))
-        title.setStyleSheet("color: #ff6b81;")
+        title.setFont(QFont('Microsoft YaHei', 18, QFont.Bold))
+        title.setStyleSheet("color: #ff6b81; padding: 5px 0;")
         layout.addWidget(title)
 
         sub = QLabel("请登录以继续")
         sub.setAlignment(Qt.AlignCenter)
-        sub.setStyleSheet("color: #999; font-size: 13px; padding-bottom: 8px;")
+        sub.setStyleSheet("color: #999; font-size: 12px; padding-bottom: 5px;")
         layout.addWidget(sub)
 
         form = QFrame()
-        form.setStyleSheet("background: white; border-radius: 12px; padding: 15px;")
+        form.setStyleSheet("background: white; border-radius: 10px; padding: 8px;")
         form_layout = QVBoxLayout(form)
-        form_layout.setSpacing(12)
+        form_layout.setSpacing(10)
+        form_layout.setContentsMargins(12, 10, 12, 10)
 
         self.username_input = QLineEdit()
         self.username_input.setPlaceholderText("用户名")

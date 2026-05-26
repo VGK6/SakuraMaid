@@ -147,7 +147,7 @@ class SkillRegistry:
             total = len(chars | kw_chars)
             overlap = common / max(total, 1) if total > 0 else 0
             score = overlap * 0.7 + (s['health_score'] / 100) * 0.3
-            if score > best_score and score >= 0.4:
+            if score > best_score and score >= 0.3:  # 降低阈值至0.3
                 best_score = score
                 best_match = s
         

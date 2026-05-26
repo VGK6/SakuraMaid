@@ -69,7 +69,7 @@ def ensure_db(db_path: str = None) -> str:
 def get_conn(db_path: str = None):
     """获取数据库连接"""
     path = ensure_db(db_path)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=10)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.row_factory = sqlite3.Row

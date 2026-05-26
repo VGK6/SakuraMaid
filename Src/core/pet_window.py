@@ -167,8 +167,22 @@ class MaidPet(QWidget):
     # ── 交互 ──
 
     def _get_voice_lang(self) -> str:
-        """获取用户设置的语音语种"""
-        return self.user_cfg.get("voice_lang", "auto") if self.user_cfg else "auto"
+        """从数据库读取最新的语音语种设置"""
+        try:
+            from modules.database import get_conn
+            conn = get_conn()
+            c = conn.cursor()
+            c.execute("SELECT user_id FROM users ORDER BY last_login DESC LIMIT 1")
+            row = c.fetchone()
+            uid = row['user_id'] if row else 0
+            conn.close()
+            if uid:
+                from ui.config_ui import db_to_cfg
+                cfg = db_to_cfg(uid)
+                return cfg.get("voice_lang", "auto")
+        except:
+            pass
+        return "auto"
 
     def _greet(self):
         self.state = 'hello'
@@ -267,6 +281,7 @@ class MaidPet(QWidget):
 
     def _start_voice_input(self):
         """启动语音输入（可从任意线程安全调用）"""
+        from modules.speech_recognition import listen, is_listening
         if is_listening():
             self._bubble_queue.put(("🎤 正在录音中...", 2000))
             return
@@ -279,9 +294,29 @@ class MaidPet(QWidget):
 
     def _do_open_settings(self):
         from ui.config_ui import ConfigUI, db_to_cfg
+        from modules.database import get_conn
         self.hide()
-        cfg_ui = ConfigUI(user={"user_id": 0, "username": "龙之介大人"})
+        
+        # 获取当前用户ID
+        uid = 0
+        try:
+            conn = get_conn()
+            c = conn.cursor()
+            c.execute("SELECT user_id FROM users ORDER BY last_login DESC LIMIT 1")
+            row = c.fetchone()
+            uid = row['user_id'] if row else 0
+            conn.close()
+        except:
+            pass
+        
+        cfg_ui = ConfigUI(user={"user_id": uid, "username": "龙之介大人"})
         if cfg_ui.exec() == ConfigUI.Accepted:
+            # 设置保存后立即重载配置
+            new_cfg = db_to_cfg(uid)
+            self.user_cfg = new_cfg
+            # 应用语种设置到气泡
+            from modules.voice import detect_lang
+            bubble_lang = new_cfg.get("bubble_lang", "auto")
             self.show()
         else:
             self.show()
@@ -296,6 +331,7 @@ class MaidPet(QWidget):
             pass
 
         self._show_bubble("🎤 聆听中，说完会自动停止...", 0)
+        from modules.speech_recognition import listen
         text = listen(timeout=10.0, silence_limit=2.0)
         
         self._clear_bubble()
@@ -401,6 +437,7 @@ class MaidPet(QWidget):
             self._show_bubble(f"📷 分析失败: {str(e)[:30]}", 3000)
 
     def _do_action_voice(self):
+        from modules.speech_recognition import listen
         text = listen(timeout=8.0)
         if text:
             self._show_bubble(f"🤖 {text}", 2000)

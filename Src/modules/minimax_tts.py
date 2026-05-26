@@ -1,7 +1,7 @@
 """
 MiniMax TTS API 客户端 — 云端音色克隆
 """
-import json, urllib.request, base64, os, tempfile
+import json, urllib.request, os, tempfile
 
 API_URL = "https://api.minimax.chat/v1/text_to_speech"
 
@@ -23,7 +23,7 @@ def speak(text: str, ref_audio: str = None) -> bool:
         # 音色克隆：上传参考音频
         if ref_audio and os.path.exists(ref_audio):
             with open(ref_audio, 'rb') as f:
-                audio_b64 = base64.b64encode(f.read()).decode()
+                audio_b64 = __import__('base64').b64encode(f.read()).decode()
             payload["voice_id"] = ""  
             payload["audio_file"] = audio_b64
             payload["audio_text"] = "龙之介大人，早上好，我是小女仆"
@@ -34,16 +34,11 @@ def speak(text: str, ref_audio: str = None) -> bool:
             method="POST")
         
         with urllib.request.urlopen(req, timeout=60) as resp:
-            result = json.loads(resp.read())
-            audio_b64 = result.get("audio_file", "")
-            if not audio_b64:
-                err = result.get("base_resp", {}).get("status_msg", "未知错误")
-                print(f"MiniMax错误: {err}")
-                return False
+            audio_data = resp.read()
         
-        tmp = os.path.join(tempfile.gettempdir(), "minimax_tts.wav")
+        tmp = os.path.join(tempfile.gettempdir(), "minimax_tts.mp3")
         with open(tmp, "wb") as f:
-            f.write(base64.b64decode(audio_b64))
+            f.write(audio_data)
         
         import soundfile as sf, sounddevice as sd
         data, sr = sf.read(tmp)

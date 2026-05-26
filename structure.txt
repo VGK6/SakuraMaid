@@ -7,8 +7,6 @@ Maid_deskpet3/
 │
 ├── SakMaienv/                   # Python虚拟环境 (主项目)
 │
-├── FishEnv/                     # Python虚拟环境 (FishSpeech TTS)
-│
 ├── SakuraMaid_DB.s3db           # 用户数据库(运行后生成)
 │
 ├── session.json                 # 登录会话(记住我/直接登录)
@@ -34,7 +32,7 @@ Maid_deskpet3/
 │   ├── modules/                 # 功能模块
 │   │   ├── __init__.py
 │   │   ├── database.py          # SQLite数据库 (WAL模式)
-│   │   ├── voice.py             # TTS语音合成(优先FishSpeech API→本地→在线)
+│   │   ├── voice.py             # TTS语音合成(优先MiniMax API→本地→在线)
 │   │   ├── speech_recognition.py # 语音识别(sense-voice, PyAudio)
 │   │   ├── vision.py            # 视觉理解(llava看图/屏幕分析)
 │   │   ├── minimax_tts.py         # MiniMax TTS API音色克隆客户端
@@ -42,9 +40,10 @@ Maid_deskpet3/
 │   │   ├── action_engine.py     # 动作引擎(llava看图→LLM规划→执行)
 │   │   ├── hotkey.py            # 全局快捷键(Ctrl+Shift+V, WinAPI)
 │   │   ├── camera_env.py         # 环境感知(OpenCV摄像头+人脸检测)
+│   │   ├── camera_env_design.md  # 环境感知设计文档
 │   │   ├── proactive_engine.py  # 主动能力引擎(定时器+环境感知+异常检测)
-│   ├── pet_timer.py         # 桌宠定时器(已整合到proactive_engine)
-│   ├── astrbot_client.py    # AstrBot API客户端(主要)
+│   │   ├── pet_timer.py         # 桌宠定时器(已整合到proactive_engine)
+│   │   ├── astrbot_client.py    # AstrBot API客户端(主要)
 │   │   ├── llm_client.py        # DeepSeek LLM客户端(备用)
 │   │   ├── system_monitor.py    # 系统监控(CPU/内存/磁盘)
 │   │   ├── virtual_hand.py      # 虚拟手(鼠标键盘模拟)
