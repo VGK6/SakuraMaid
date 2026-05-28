@@ -49,6 +49,10 @@ def db_to_cfg(user_id: int) -> dict:
         "llm_mode": g("llm.mode", "api"),
         "character_name": g("pet.character", "小女仆"),
         "sound_source": g("pet.sound_source", ""),
+        "personality": g("pet.personality", "温柔贴心"),
+        "personality_prompt": g("pet.personality_prompt", ""),
+        "user_title": g("pet.user_title", "龙之介大人"),
+        "talk_style": g("pet.talk_style", "正常"),
         "window_x": int(g("window_x", "-1")),
         "window_y": int(g("window_y", "-1")),
     }
@@ -69,6 +73,10 @@ def cfg_to_db(user_id: int, cfg: dict):
         ("bubble", "lang", cfg.get("bubble_lang", "auto")),
         ("pet", "character", cfg.get("character_name", "小女仆")),
         ("pet", "sound_source", cfg.get("sound_source", "")),
+        ("pet", "personality", cfg.get("personality", "温柔贴心")),
+        ("pet", "personality_prompt", cfg.get("personality_prompt", "")),
+        ("pet", "user_title", cfg.get("user_title", "龙之介大人")),
+        ("pet", "talk_style", cfg.get("talk_style", "正常")),
     ]
     for cat, key, val in mapping:
         save_setting(user_id, cat, key, str(val))
@@ -148,7 +156,7 @@ class ConfigUI(QDialog):
             nav_layout.addWidget(user_btn)
 
         self.nav_btns = []
-        nav_items = [("🖼️", "桌宠设置", 0), ("⚙️", "系统配置", 1), ("🧠", "技能管理", 2)]
+        nav_items = [("🖼️", "桌宠设置", 0), ("⚙️", "系统配置", 1), ("🧠", "技能管理", 2), ("🎭", "人格记忆", 3)]
         self.stacked = QStackedWidget()
 
         for icon, text, idx in nav_items:
@@ -175,6 +183,8 @@ class ConfigUI(QDialog):
         self.stacked.addWidget(page1)
         page2 = self._build_skill_page()
         self.stacked.addWidget(page2)
+        page3 = self._build_personality_page()
+        self.stacked.addWidget(page3)
 
         content_layout.addWidget(self.stacked)
 
@@ -381,6 +391,24 @@ class ConfigUI(QDialog):
         g2.setLayout(g2_layout)
         layout.addWidget(g2)
 
+        # ── 音色克隆 ──
+        g3 = QGroupBox("音色克隆")
+        g3_layout = QFormLayout()
+        g3_layout.setSpacing(12)
+        self.clone_path_edit = QLineEdit(self.cfg.get("sound_source", ""))
+        self.clone_path_edit.setPlaceholderText("选择参考音频文件 (.wav)")
+        self.clone_browse_btn = QPushButton("浏览...")
+        self.clone_browse_btn.clicked.connect(lambda: self._browse_audio())
+        clone_row = QHBoxLayout()
+        clone_row.addWidget(self.clone_path_edit)
+        clone_row.addWidget(self.clone_browse_btn)
+        g3_layout.addRow("参考音频:", clone_row)
+        clone_info = QLabel("提示：选择一段目标人声的wav音频(建议5-30秒)，保存后语音播报将使用此音色克隆")
+        clone_info.setStyleSheet("color: #999; font-size: 11px;")
+        g3_layout.addRow("", clone_info)
+        g3.setLayout(g3_layout)
+        layout.addWidget(g3)
+
         layout.addStretch()
         return page
 
@@ -580,11 +608,87 @@ class ConfigUI(QDialog):
                 self.char_preview.setPixmap(pix.scaled(130, 130, Qt.KeepAspectRatio, Qt.SmoothTransformation))
                 self.char_preview.setText("")
 
+    def _build_personality_page(self):
+        """人格记忆设置页面"""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setSpacing(15)
+
+        title = QLabel("🎭 人格与记忆")
+        title.setFont(QFont('Microsoft YaHei', 17, QFont.Bold))
+        title.setStyleSheet("color: #ff6b81; padding: 0 0 8px 0;")
+        layout.addWidget(title)
+
+        g1 = QGroupBox("桌宠人格设置")
+        g1_layout = QFormLayout()
+        g1_layout.setSpacing(12)
+
+        self.personality_combo = QComboBox()
+        self.personality_combo.addItems(["温柔贴心", "活泼可爱", "傲娇毒舌", "冷静理智", "治愈系"])
+        self.personality_combo.setCurrentText(self.cfg.get("personality", "温柔贴心"))
+        g1_layout.addRow("人格类型:", self.personality_combo)
+
+        self.talk_style_combo = QComboBox()
+        self.talk_style_combo.addItems(["正常", "简短", "详细", "带表情"])
+        self.talk_style_combo.setCurrentText(self.cfg.get("talk_style", "正常"))
+        g1_layout.addRow("说话风格:", self.talk_style_combo)
+
+        self.user_title = QLineEdit(self.cfg.get("user_title", "龙之介大人"))
+        self.user_title.setPlaceholderText("桌宠对您的称呼，如：主人、哥哥、先生")
+        g1_layout.addRow("对用户称谓:", self.user_title)
+
+        self.personality_prompt = QLineEdit(self.cfg.get("personality_prompt", ""))
+        self.personality_prompt.setPlaceholderText("人格提示词，如：你是一个温柔贴心的女仆，总是关心主人")
+        g1_layout.addRow("人格提示词:", self.personality_prompt)
+
+        g1.setLayout(g1_layout)
+        layout.addWidget(g1)
+
+        # 从AstrBot导入
+        import_btn = QPushButton("🔄 从AstrBot智能体导入人格")
+        import_btn.setStyleSheet("background: #ff6b81; color: white; padding: 12px; font-size: 14px; border-radius: 8px;")
+        import_btn.clicked.connect(self._import_from_astrbot)
+        layout.addWidget(import_btn)
+
+        # AstrBot记忆系统
+        g2 = QGroupBox("记忆系统")
+        g2_layout = QVBoxLayout()
+        mem_info = QLabel("桌宠记忆功能通过 AstrBot 的本地回忆插件提供。对话历史、用户偏好、重要事件等信息会被自动记录。")
+        mem_info.setWordWrap(True)
+        mem_info.setStyleSheet("color: #666; font-size: 13px; padding: 10px;")
+        g2_layout.addWidget(mem_info)
+        g2.setLayout(g2_layout)
+        layout.addWidget(g2)
+
+        layout.addStretch()
+        return page
+
+    def _import_from_astrbot(self):
+        """从AstrBot导入智能体人格设置"""
+        from PySide6.QtWidgets import QMessageBox
+        from modules.astrbot_client import chat
+        try:
+            reply = chat("请介绍你自己，包括你的人格设定、性格特点和说话风格，简要回答即可。", session_id="_get_personality")
+            if reply:
+                self.personality_prompt.setText(reply[:200])
+                QMessageBox.information(self, "导入成功", "已从AstrBot获取智能体信息并填入人格提示词")
+            else:
+                QMessageBox.warning(self, "导入失败", "无法获取AstrBot智能体信息")
+        except Exception as e:
+            QMessageBox.warning(self, "导入失败", f"连接AstrBot失败: {str(e)[:60]}")
+
     def _browse_file(self, line_edit: QLineEdit, file_filter: str):
         """打开文件选择器"""
         path, _ = QFileDialog.getOpenFileName(self, "选择文件", "", file_filter)
         if path:
             line_edit.setText(path)
+
+    def _browse_audio(self):
+        """选择音色克隆音频"""
+        path, _ = QFileDialog.getOpenFileName(self, "选择参考音频", "",
+                                               "音频文件 (*.wav *.mp3 *.ogg)")
+        if path:
+            self.clone_path_edit.setText(path)
 
     def _test_api(self):
         import urllib.request, json
@@ -636,8 +740,9 @@ class ConfigUI(QDialog):
         else:
             for s in skills:
                 skill_box = QFrame()
-                skill_box.setStyleSheet("QFrame { background: white; border: 1px solid #eee; border-radius: 8px; padding: 12px; margin: 3px; }")
+                skill_box.setStyleSheet("QFrame { background: white; border: 1px solid #eee; border-radius: 8px; padding: 15px; margin: 5px; }")
                 box_layout = QVBoxLayout(skill_box)
+                box_layout.setContentsMargins(5, 5, 5, 5)
 
                 name_row = QHBoxLayout()
                 name_label = QLabel(f"{'🟢' if s['enabled'] else '🔴'} {s['name']}")
@@ -662,11 +767,11 @@ class ConfigUI(QDialog):
 
                 btn_row = QHBoxLayout()
                 toggle_btn = QPushButton("禁用" if s['enabled'] else "启用")
-                toggle_btn.setFixedWidth(55)
+                toggle_btn.setFixedWidth(70)
                 toggle_btn.clicked.connect(lambda checked, sid=s['id'], en=s['enabled']: self._toggle_skill(sid, not en))
                 del_btn = QPushButton("删除")
-                del_btn.setStyleSheet("color: #f44336;")
-                del_btn.setFixedWidth(55)
+                del_btn.setStyleSheet("color: #f44336; padding: 6px 10px;")
+                del_btn.setFixedWidth(70)
                 del_btn.clicked.connect(lambda checked, sid=s['id']: self._delete_skill(sid))
                 btn_row.addWidget(toggle_btn)
                 btn_row.addWidget(del_btn)
@@ -717,6 +822,11 @@ class ConfigUI(QDialog):
             "tts_mode": self.cfg.get("tts_mode", "api"),
             "llm_mode": self.cfg.get("llm_mode", "api"),
             "character_name": self.cfg.get("character_name", "小女仆"),
+            "sound_source": self.clone_path_edit.text().strip() if hasattr(self, 'clone_path_edit') else "",
+            "personality": self.personality_combo.currentText() if hasattr(self, 'personality_combo') else "温柔贴心",
+            "personality_prompt": self.personality_prompt.text().strip() if hasattr(self, 'personality_prompt') else "",
+            "user_title": self.user_title.text().strip() if hasattr(self, 'user_title') else "龙之介大人",
+            "talk_style": self.talk_style_combo.currentText() if hasattr(self, 'talk_style_combo') else "正常",
             "window_x": -1, "window_y": -1,
         }
         uid = self.user.get('user_id', 0)

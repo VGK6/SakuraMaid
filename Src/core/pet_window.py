@@ -394,6 +394,7 @@ class MaidPet(QWidget):
     def _do_chat_fallback(self, text: str):
         """回退到普通对话"""
         from modules.astrbot_client import chat
+        from modules.voice import speak
         reply = chat(text)
         if reply:
             self._show_bubble(reply, 15000)
@@ -418,6 +419,13 @@ class MaidPet(QWidget):
         self._show_bubble(msg, dur)
         from modules.voice import speak
         speak(msg, lang=self._get_voice_lang())
+
+    def _chat(self):
+        """打开文字输入框对话"""
+        from PySide6.QtWidgets import QInputDialog
+        text, ok = QInputDialog.getText(self, "💬 说句话", "输入你想说的话：")
+        if ok and text:
+            self._do_chat_fallback(text)
 
     def _start_action_mode(self):
         """启动自动执行模式（语音输入→动作）"""

@@ -58,8 +58,12 @@ def chat(message: str, session_id: str = "maid_pet", username: str = "龙之介�
                 if line.startswith('data: '):
                     try:
                         chunk = json.loads(line[6:])
-                        if chunk.get('type') == 'plain':
+                        ct = chunk.get('type', '')
+                        if ct == 'plain':
                             replies.append(chunk['data'])
+                        elif ct == 'complete':
+                            if chunk.get('data') and not replies:
+                                replies.append(chunk['data'])
                     except:
                         pass
             return ''.join(replies)

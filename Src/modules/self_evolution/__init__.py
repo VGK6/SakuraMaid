@@ -51,21 +51,26 @@ class SelfEvolution:
             
             return self._wrap("execute", skill["name"], result)
 
-        # 3. 无匹配 → LLM生成
-        gen = self.generator.confirm_and_register(task)
+        # 3. 无匹配 → 判断是否为操作指令
+        action_keywords = ["打开", "关闭", "创建", "删除", "复制", "移到", "新建", "整理",
+                          "下载", "搜索", "启动", "安装", "修改", "编辑", "保存"]
+        is_task = any(kw in task for kw in action_keywords)
         
-        if gen.get("action") == "confirm":
-            return self._wrap("confirm", "", {}, gen.get("message", "需要确认"))
+        if is_task:
+            # 只有明确的操作指令才尝试LLM生成
+            gen = self.generator.confirm_and_register(task)
+            if gen.get("action") == "confirm":
+                return self._wrap("confirm", "", {}, gen.get("message", "需要确认"))
+            if gen.get("action") == "registered":
+                skill = gen["skill"]
+                result = self.executor.execute(skill["code"])
+                return self._wrap("execute", skill["name"], result, f"新技能已注册")
+            if gen.get("action") == "conflict":
+                return self._wrap("confirm", "", {}, gen.get("message", "技能冲突"))
+            return self._wrap("error", "", {}, gen.get("message", "无法处理"))
         
-        if gen.get("action") == "registered":
-            skill = gen["skill"]
-            result = self.executor.execute(skill["code"])
-            return self._wrap("execute", skill["name"], result, f"新技能已注册")
-        
-        if gen.get("action") == "conflict":
-            return self._wrap("confirm", "", {}, gen.get("message", "技能冲突"))
-        
-        return self._wrap("error", "", {}, gen.get("message", "无法处理"))
+        # 普通对话 → 直接返回空，交给fallback处理
+        return {"action": "chat", "skill_name": "", "success": False, "message": ""}
 
     def _wrap(self, action: str, name: str, result: dict, message: str = "") -> dict:
         return {
