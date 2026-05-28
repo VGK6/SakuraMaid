@@ -7,6 +7,20 @@ import os, json, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from modules.database import get_settings, save_setting
 
+# 启动时预生成音量试听音频（只生成一次，后续直接用）
+import os as _vol_os, subprocess as _vol_sp, sys as _vol_sys
+_vol_path = _vol_os.path.join(_vol_os.path.dirname(_vol_os.path.dirname(_vol_os.path.dirname(_vol_os.path.abspath(__file__)))),
+                              "resourses", "temp", "vol_test.wav")
+_vol_os.makedirs(_vol_os.path.dirname(_vol_path), exist_ok=True)
+if not _vol_os.path.exists(_vol_path):
+    try:
+        _vol_sp.run([_vol_sys.executable, '-u', '-c',
+            f"import asyncio, edge_tts; "
+            f"asyncio.run(edge_tts.Communicate('这个音量大小合适吗','zh-CN-XiaoxiaoNeural').save(r'{_vol_path}'))"],
+            capture_output=True, timeout=60)
+    except:
+        pass
+
 from PySide6.QtWidgets import (QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QStackedWidget,
                                QLineEdit, QComboBox, QPushButton, QSlider, QCheckBox,
                                QGroupBox, QFormLayout, QFileDialog, QFrame,
@@ -255,54 +269,78 @@ class ConfigUI(QDialog):
         pitch_row.addWidget(self.pitch_label)
         g2_layout.addRow("音调:", pitch_row)
 
-        # 音量（原神风格：滑动时连续播放，动态调音量）
+        # 音量（预加载音频 + 线程循环播放）
+        import threading, time
         vol_row = QHBoxLayout()
         vol_slider = QSlider(Qt.Horizontal)
         vol_slider.setRange(0, 100)
         vol_slider.setValue(int(self.cfg.get("tts_volume", 80)))
         vol_label = QLabel(f"{vol_slider.value()}%")
         vol_slider.valueChanged.connect(lambda v: vol_label.setText(f"{v}%"))
-        vol_slider.sliderMoved.connect(lambda v: vol_label.setText(f"{v}%"))
-        self._vol_proc = None
-        self._vol_generating = False
+
+        # 预加载音频
+        self._vol_audio_data = None
+        self._vol_sample_rate = None
+        if _vol_os.path.exists(_vol_path):
+            try:
+                import soundfile as sf
+                self._vol_audio_data, self._vol_sample_rate = sf.read(_vol_path)
+            except Exception as e:
+                print(f"加载音量提示音失败: {e}")
+        else:
+            print(f"音量提示音文件不存在: {_vol_path}")
+
+        # 线程控制变量
         self._vol_playing = False
-        import tempfile as _tf
-        vol_tmp = _tf.gettempdir()
-        def _start_vol_loop(val):
-            import subprocess, os, sys, threading
-            if self._vol_playing or self._vol_generating:
+        self._vol_stop_event = None
+
+        def _vol_play_loop():
+            """循环播放，每次播放前根据滑块当前值调整音量"""
+            import sounddevice as sd
+            stop_event = self._vol_stop_event
+            data = self._vol_audio_data
+            sr = self._vol_sample_rate
+            if data is None:
                 return
-            if not os.path.exists(os.path.join(vol_tmp, "vol_test.wav")):
-                self._vol_generating = True
-                subprocess.run([sys.executable, '-u', '-c',
-                    f"import asyncio, edge_tts; "
-                    f"asyncio.run(edge_tts.Communicate('这个音量大小合适吗','zh-CN-XiaoxiaoNeural').save(r'{vol_tmp}/vol_test.wav'))"],
-                    capture_output=True, timeout=60)
-                self._vol_generating = False
+            while not stop_event.is_set():
+                val = vol_slider.value()
+                gain = val / 100.0
+                adjusted = data * gain
+                sd.play(adjusted, sr)
+                duration = len(adjusted) / sr
+                elapsed = 0
+                while elapsed < duration and not stop_event.is_set():
+                    time.sleep(0.05)
+                    elapsed += 0.05
+                sd.stop()  # 安全停止
+                if stop_event.is_set():
+                    break
+
+        def _start_vol_loop():
+            if self._vol_playing or self._vol_audio_data is None:
+                return
             self._vol_playing = True
-            def _loop():
-                p = subprocess.Popen(
-                    [sys.executable, '-u', '-c',
-                     f"import soundfile as sf, sounddevice as sd; "
-                     f"d,sr=sf.read(r'{vol_tmp}/vol_test.wav'); "
-                     f"adj=d*({val}/100.0); "
-                     f"while True: sd.play(adj, sr); sd.wait()"],
-                    creationflags=subprocess.CREATE_NO_WINDOW
-                )
-                self._vol_proc = p
-                p.wait()
-                self._vol_playing = False
-            threading.Thread(target=_loop, daemon=True).start()
+            self._vol_stop_event = threading.Event()
+            self._vol_thread = threading.Thread(target=_vol_play_loop, daemon=True)
+            self._vol_thread.start()
+
         def _stop_vol_loop():
-            if self._vol_proc and self._vol_proc.poll() is None:
-                self._vol_proc.terminate()
-                self._vol_proc = None
-        vol_slider.sliderMoved.connect(_start_vol_loop)
+            """停止循环：让当前音频播完，不再继续"""
+            if not self._vol_playing:
+                return
+            self._vol_stop_event.set()
+            # 等待线程退出（播放完当前遍自然结束）
+            if self._vol_thread and self._vol_thread.is_alive():
+                self._vol_thread.join(timeout=2.0)
+            self._vol_playing = False
+            self._vol_thread = None
+            self._vol_stop_event = None
+
+        vol_slider.sliderPressed.connect(_start_vol_loop)
         vol_slider.sliderReleased.connect(_stop_vol_loop)
         vol_row.addWidget(vol_slider)
         vol_row.addWidget(vol_label)
         g2_layout.addRow("音量:", vol_row)
-        # 保存引用用于_on_save
         self._pet_vol_slider = vol_slider
 
         self.emotion_combo = QComboBox()
