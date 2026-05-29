@@ -1,14 +1,113 @@
 """
-MiniMax TTS API 客户端 — 云端音色克隆
+MiniMax TTS API 客户端
+启动时自动克隆音色，后续直接使用
 """
-import json, urllib.request, os, tempfile
+import json, urllib.request, os, tempfile, uuid, threading
 
 API_URL = "https://api.minimax.chat/v1/text_to_speech"
+CLONE_URL = "https://api.minimax.chat/v1/voice_clone"
+UPLOAD_URL = "https://api.minimax.chat/v1/files/upload"
+
+_voice_id = "female-shaonv"  # 默认音色
 
 def is_available() -> bool:
     return bool(os.environ.get("MINIMAX_API_KEY", ""))
 
+def _upload_file(file_path: str) -> str:
+    """上传音频文件到MiniMax，返回file_id"""
+    import uuid as _uuid
+    boundary = "----" + str(_uuid.uuid4()).replace('-', '')
+    with open(file_path, 'rb') as f:
+        audio_data = f.read()
+    body_parts = []
+    body_parts.append(f"--{boundary}".encode())
+    body_parts.append(b'Content-Disposition: form-data; name="purpose"')
+    body_parts.append(b"")
+    body_parts.append(b"voice_clone")
+    body_parts.append(f"--{boundary}".encode())
+    body_parts.append(f'Content-Disposition: form-data; name="file"; filename="{os.path.basename(file_path)}"'.encode())
+    body_parts.append(b"Content-Type: audio/wav")
+    body_parts.append(b"")
+    body_parts.append(audio_data)
+    body_parts.append(f"--{boundary}--".encode())
+    body_data = b"\r\n".join(body_parts)
+    
+    key = os.environ.get("MINIMAX_API_KEY", "")
+    req = urllib.request.Request(UPLOAD_URL, data=body_data,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST")
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        result = json.loads(resp.read())
+        return str(result.get('file', {}).get('file_id', ''))
+
+def _clone_voice(file_id: str, voice_name: str = "小女仆") -> str:
+    """用file_id克隆音色，返回voice_id"""
+    global _voice_id
+    key = os.environ.get("MINIMAX_API_KEY", "")
+    new_vid = "pet_" + str(uuid.uuid4()).replace('-', '')[:8]
+    
+    boundary = "----" + str(uuid.uuid4()).replace('-', '')
+    body_parts = []
+    body_parts.append(f"--{boundary}".encode())
+    body_parts.append(b'Content-Disposition: form-data; name="voice_id"')
+    body_parts.append(b"")
+    body_parts.append(new_vid.encode())
+    body_parts.append(f"--{boundary}".encode())
+    body_parts.append(b'Content-Disposition: form-data; name="voice_name"')
+    body_parts.append(b"")
+    body_parts.append(voice_name.encode('utf-8'))
+    body_parts.append(f"--{boundary}".encode())
+    body_parts.append(b'Content-Disposition: form-data; name="file_id"')
+    body_parts.append(b"")
+    body_parts.append(file_id.encode())
+    body_parts.append(f"--{boundary}".encode())
+    body_parts.append(b'Content-Disposition: form-data; name="audio_text"')
+    body_parts.append(b"")
+    body_parts.append("龙之介大人，早上好，我是小女仆".encode('utf-8'))
+    body_parts.append(f"--{boundary}--".encode())
+    body_data = b"\r\n".join(body_parts)
+    
+    req = urllib.request.Request(CLONE_URL, data=body_data,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST")
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        result = json.loads(resp.read())
+        if result.get('base_resp', {}).get('status_code') == 0:
+            _voice_id = new_vid
+            return new_vid
+    return ""
+
+def init(ref_audio: str = None):
+    """启动时初始化：上传参考音频→克隆音色"""
+    global _voice_id
+    key = os.environ.get("MINIMAX_API_KEY", "")
+    if not key:
+        return
+    
+    custom_id = os.environ.get("MINIMAX_VOICE_ID", "")
+    if custom_id:
+        _voice_id = custom_id
+        print(f"🎤 MiniMax: 使用已有音色 {_voice_id}")
+        return
+    
+    if ref_audio and os.path.exists(ref_audio):
+        try:
+            print("🎤 MiniMax: 上传参考音频...")
+            file_id = _upload_file(ref_audio)
+            if file_id:
+                print(f"🎤 MiniMax: 克隆音色中...")
+                vid = _clone_voice(file_id)
+                if vid:
+                    print(f"🎤 MiniMax: 音色克隆成功! voice_id={vid}")
+                    return
+        except Exception as e:
+            print(f"🎤 MiniMax: 音色克隆失败: {e}")
+    
+    print(f"🎤 MiniMax: 使用默认音色 female-shaonv")
+
 def speak(text: str, ref_audio: str = None) -> bool:
+    """合成语音并播放"""
+    global _voice_id
     key = os.environ.get("MINIMAX_API_KEY", "")
     if not key:
         return False
@@ -17,22 +116,12 @@ def speak(text: str, ref_audio: str = None) -> bool:
         payload = {
             "model": "speech-01",
             "text": text,
-            "voice_id": "female-shaonv",  # 默认女声
+            "voice_id": _voice_id,
         }
-        
-        # 音色克隆：上传参考音频
-        if ref_audio and os.path.exists(ref_audio):
-            with open(ref_audio, 'rb') as f:
-                audio_b64 = __import__('base64').b64encode(f.read()).decode()
-            payload["voice_id"] = ""  
-            payload["audio_file"] = audio_b64
-            payload["audio_text"] = "龙之介大人，早上好，我是小女仆"
-
         data = json.dumps(payload).encode()
         req = urllib.request.Request(API_URL, data=data,
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             method="POST")
-        
         with urllib.request.urlopen(req, timeout=60) as resp:
             audio_data = resp.read()
         
@@ -41,14 +130,14 @@ def speak(text: str, ref_audio: str = None) -> bool:
             f.write(audio_data)
         
         import soundfile as sf, sounddevice as sd
-        data, sr = sf.read(tmp)
-        sd.play(data, sr)
+        d, sr = sf.read(tmp)
+        sd.play(d, sr)
         sd.wait()
         return True
         
     except urllib.error.HTTPError as e:
         body = e.read().decode()
-        print(f"MiniMax API错误 [{e.code}]: {body[:100]}")
+        print(f"MiniMax错误 [{e.code}]: {body[:100]}")
     except Exception as e:
         print(f"MiniMax失败: {e}")
     return False

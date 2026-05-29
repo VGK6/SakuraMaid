@@ -187,6 +187,18 @@ class MaidPet(QWidget):
     def _greet(self):
         self.state = 'hello'
         self.frame_idx = 0
+        # 启动时自动克隆音色（读取配置的参考音频）
+        try:
+            ref = ""
+            if hasattr(self, 'user_cfg') and self.user_cfg:
+                ref = self.user_cfg.get("sound_source", "")
+            if not ref:
+                ref = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                  "resourses", "voices", "voice_characters_set", "maid_sounds_cha.wav")
+            from modules.minimax_tts import init
+            threading.Thread(target=lambda: init(ref), daemon=True).start()
+        except:
+            pass
         self._show_bubble("龙之介大人，欢迎回来~🌸")
         from modules.voice import speak
         threading.Thread(target=lambda: speak("龙之介大人，欢迎回来~"), daemon=True).start()
@@ -364,8 +376,27 @@ class MaidPet(QWidget):
             self._show_bubble("🤔 正在分析并执行...", 2000)
             threading.Thread(target=self._do_action, args=(text,), daemon=True).start()
         else:
-            # 自我进化：尝试技能匹配
-            self._try_self_evolution(text)
+            # 所有对话直接走AstrBot智能体（核心大脑）
+            self._do_chat(text)
+
+    def _do_chat(self, text: str):
+        """对话走AstrBot智能体"""
+        from modules.astrbot_client import chat
+        from modules.voice import speak
+        self._show_bubble("💭 思考中...", 3000)
+        reply = chat(text)
+        self._clear_bubble()
+        if reply:
+            self._show_bubble(reply, 15000)
+            def _speak_and_sync():
+                dur = speak(reply, lang=self._get_voice_lang())
+                if dur > 0:
+                    import time
+                    time.sleep(1)
+                    self._bubble_queue.put(("__clear__", 0))
+                else:
+                    self._bubble_queue.put(("__clear__", 5000))
+            threading.Thread(target=_speak_and_sync, daemon=True).start()
 
     def _try_self_evolution(self, text: str):
         """尝试用自我进化系统处理指令"""
@@ -425,7 +456,7 @@ class MaidPet(QWidget):
         from PySide6.QtWidgets import QInputDialog
         text, ok = QInputDialog.getText(self, "💬 说句话", "输入你想说的话：")
         if ok and text:
-            self._do_chat_fallback(text)
+            self._do_chat(text)
 
     def _start_action_mode(self):
         """启动自动执行模式（语音输入→动作）"""

@@ -115,12 +115,10 @@ def speak(text: str, lang: str = "auto", use_local: bool = True, sid: int = 0) -
     lang: auto=自动检测, zh=中文, ja=日文, en=英文
     优先级: FishSpeech API → edge-tts → sherpa-onnx VITS
     """
-    # 1. FishSpeech API (未来接入, 优先级最高)
+    # 1. MiniMax API (音色克隆，使用预设音色)
     try:
-        ref = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                          "resourses", "voices", "voice_characters_set", "maid_sounds_cha.wav")
         from modules.minimax_tts import speak as mini_speak, is_available
-        if is_available() and os.path.exists(ref) and mini_speak(text, ref):
+        if is_available() and mini_speak(text):
             return len(text) * 0.12
     except:
         pass
