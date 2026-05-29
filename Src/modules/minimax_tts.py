@@ -78,7 +78,7 @@ def _clone_voice(file_id: str, voice_name: str = "小女仆") -> str:
     return ""
 
 def init(ref_audio: str = None):
-    """启动时初始化：上传参考音频→克隆音色"""
+    """启动时初始化：检测参考音频是否变更，必要时重新克隆"""
     global _voice_id
     key = os.environ.get("MINIMAX_API_KEY", "")
     if not key:
@@ -87,21 +87,71 @@ def init(ref_audio: str = None):
     custom_id = os.environ.get("MINIMAX_VOICE_ID", "")
     if custom_id:
         _voice_id = custom_id
-        print(f"🎤 MiniMax: 使用已有音色 {_voice_id}")
+        print(f"🎤 MiniMax: 使用环境变量音色 {_voice_id}")
         return
     
-    if ref_audio and os.path.exists(ref_audio):
-        try:
-            print("🎤 MiniMax: 上传参考音频...")
-            file_id = _upload_file(ref_audio)
-            if file_id:
-                print(f"🎤 MiniMax: 克隆音色中...")
-                vid = _clone_voice(file_id)
-                if vid:
-                    print(f"🎤 MiniMax: 音色克隆成功! voice_id={vid}")
-                    return
-        except Exception as e:
-            print(f"🎤 MiniMax: 音色克隆失败: {e}")
+    if not ref_audio or not os.path.exists(ref_audio):
+        print(f"🎤 MiniMax: 参考音频不存在，使用默认音色")
+        return
+    
+    # 从数据库读取已保存的音色映射
+    db_key = None
+    db_vid = None
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        from modules.database import get_conn
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT user_id FROM users ORDER BY last_login DESC LIMIT 1")
+        row = c.fetchone()
+        if row:
+            uid = row['user_id']
+            c.execute("SELECT value FROM settings WHERE user_id=? AND category='minimax' AND key='voice_map'", (uid,))
+            r = c.fetchone()
+            if r:
+                vm = json.loads(r['value'])
+                db_key = vm.get("ref_key")
+                db_vid = vm.get("voice_id")
+        conn.close()
+    except:
+        pass
+    
+    # 用文件路径+修改时间做标识
+    ref_key = f"{ref_audio}|{os.path.getmtime(ref_audio):.0f}"
+    
+    if db_key == ref_key and db_vid:
+        _voice_id = db_vid
+        print(f"🎤 MiniMax: 音频未变更，使用已有音色 {_voice_id}")
+        return
+    
+    try:
+        print("🎤 MiniMax: 检测到新音频，开始上传...")
+        file_id = _upload_file(ref_audio)
+        if file_id:
+            print(f"🎤 MiniMax: 克隆音色中...")
+            vid = _clone_voice(file_id)
+            if vid:
+                voice_map[ref_key] = {"voice_id": vid, "path": ref_audio}
+                # 保存到数据库
+                try:
+                    from modules.database import get_conn
+                    conn = get_conn()
+                    c = conn.cursor()
+                    c.execute("SELECT user_id FROM users ORDER BY last_login DESC LIMIT 1")
+                    row = c.fetchone()
+                    if row:
+                        uid = row['user_id']
+                        val = json.dumps({"ref_key": ref_key, "voice_id": vid})
+                        c.execute("DELETE FROM settings WHERE user_id=? AND category='minimax' AND key='voice_map'", (uid,))
+                        c.execute("INSERT INTO settings (user_id, category, key, value) VALUES (?, 'minimax', 'voice_map', ?)", (uid, val))
+                        conn.commit()
+                    conn.close()
+                except:
+                    pass
+                print(f"🎤 MiniMax: 音色克隆成功! voice_id={vid}")
+                return
+    except Exception as e:
+        print(f"🎤 MiniMax: 音色克隆失败: {e}")
     
     print(f"🎤 MiniMax: 使用默认音色 female-shaonv")
 

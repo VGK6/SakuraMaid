@@ -406,6 +406,26 @@ class ConfigUI(QDialog):
         clone_info = QLabel("提示：选择一段目标人声的wav音频(建议5-30秒)，保存后语音播报将使用此音色克隆")
         clone_info.setStyleSheet("color: #999; font-size: 11px;")
         g3_layout.addRow("", clone_info)
+
+        # 音色管理
+        vm_label = QLabel("已克隆的音色:")
+        vm_label.setStyleSheet("color: #ff6b81; font-weight: bold; font-size: 12px;")
+        g3_layout.addRow("", vm_label)
+        self.vm_voice_combo = QComboBox()
+        vm_row = QHBoxLayout()
+        vm_row.addWidget(self.vm_voice_combo)
+        self.vm_refresh_btn = QPushButton("刷新")
+        self.vm_refresh_btn.clicked.connect(self._refresh_voices)
+        self.vm_use_btn = QPushButton("设为当前")
+        self.vm_use_btn.clicked.connect(self._use_voice)
+        self.vm_del_btn = QPushButton("删除")
+        self.vm_del_btn.setStyleSheet("color: #f44336;")
+        self.vm_del_btn.clicked.connect(self._delete_voice)
+        vm_row.addWidget(self.vm_refresh_btn)
+        vm_row.addWidget(self.vm_use_btn)
+        vm_row.addWidget(self.vm_del_btn)
+        g3_layout.addRow("", vm_row)
+
         g3.setLayout(g3_layout)
         layout.addWidget(g3)
 
@@ -689,6 +709,66 @@ class ConfigUI(QDialog):
                                                "音频文件 (*.wav *.mp3 *.ogg)")
         if path:
             self.clone_path_edit.setText(path)
+
+    def _refresh_voices(self):
+        """刷新音色列表"""
+        import urllib.request, json
+        key = __import__('os').environ.get("MINIMAX_API_KEY", "")
+        if not key:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "提示", "未配置MiniMax API Key")
+            return
+        try:
+            # 从数据库读已保存的音色
+            from modules.database import get_conn
+            conn = get_conn()
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE category='minimax' AND key='voice_map'")
+            voices = {"female-shaonv": "默认女声"}
+            for row in c.fetchall():
+                vm = json.loads(row['value'])
+                vid = vm.get("voice_id", "")
+                if vid:
+                    voices[vid] = vm.get("path", "克隆音色")
+            conn.close()
+            self.vm_voice_combo.clear()
+            for vid, name in voices.items():
+                self.vm_voice_combo.addItem(f"{os.path.basename(name)} ({vid[:12]}...)", vid)
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "刷新完成", f"找到 {len(voices)} 个音色")
+        except Exception as e:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "刷新失败", str(e)[:50])
+
+    def _use_voice(self):
+        """设为当前音色"""
+        vid = self.vm_voice_combo.currentData()
+        if vid:
+            __import__('os').environ["MINIMAX_VOICE_ID"] = vid
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "设置成功", f"已切换音色: {self.vm_voice_combo.currentText()}")
+
+    def _delete_voice(self):
+        """删除音色"""
+        vid = self.vm_voice_combo.currentData()
+        if not vid or vid in ("female-shaonv",):
+            return
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(self, "确认删除", f"确定要删除音色 {self.vm_voice_combo.currentText()} 吗？",
+                                     QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            try:
+                import urllib.request, json
+                key = __import__('os').environ.get("MINIMAX_API_KEY", "")
+                data = json.dumps({"voice_id": vid}).encode()
+                req = urllib.request.Request("https://api.minimax.chat/v1/voice_clone", data=data,
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    method="DELETE")
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    QMessageBox.information(self, "删除成功", f"音色 {vid} 已删除")
+                    self._refresh_voices()
+            except Exception as e:
+                QMessageBox.warning(self, "删除失败", str(e)[:50])
 
     def _test_api(self):
         import urllib.request, json
