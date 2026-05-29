@@ -115,13 +115,33 @@ def speak(text: str, lang: str = "auto", use_local: bool = True, sid: int = 0) -
     lang: auto=自动检测, zh=中文, ja=日文, en=英文
     优先级: FishSpeech API → edge-tts → sherpa-onnx VITS
     """
-    # 1. MiniMax API (音色克隆，使用预设音色)
+    # 读取用户设置的TTS模式
+    # 读取TTS设置
+    _tts_mode = "api"
+    _tts_provider = ""
     try:
-        from modules.minimax_tts import speak as mini_speak, is_available
-        if is_available() and mini_speak(text):
-            return len(text) * 0.12
+        import os, sqlite3
+        _db = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "SakuraMaid_DB.s3db")
+        _conn = sqlite3.connect(_db, timeout=5)
+        _c = _conn.cursor()
+        _c.execute("SELECT value FROM settings WHERE category='tts' AND key='mode' ORDER BY rowid DESC LIMIT 1")
+        _r = _c.fetchone()
+        if _r: _tts_mode = _r[0]
+        _c.execute("SELECT value FROM settings WHERE category='tts' AND key='api_provider' ORDER BY rowid DESC LIMIT 1")
+        _r = _c.fetchone()
+        if _r: _tts_provider = _r[0]
+        _conn.close()
     except:
         pass
+    
+    # 1. MiniMax API (仅当mode=api且provider不是Edge时)
+    if _tts_mode == "api" and "Edge" not in _tts_provider:
+        try:
+            from modules.minimax_tts import speak as mini_speak, is_available
+            if is_available() and mini_speak(text, lang=lang):
+                return len(text) * 0.12
+        except:
+            pass
 
     # 2. edge-tts (中日英)
     try:

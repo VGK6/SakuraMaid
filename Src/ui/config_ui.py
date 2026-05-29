@@ -46,9 +46,24 @@ def db_to_cfg(user_id: int) -> dict:
         "bubble_lang": g("bubble.lang", "auto"),
         "tts_voice": g("tts.voice", "默认女声"),
         "tts_mode": g("tts.mode", "api"),
+        "tts_local_model_path": g("tts.local_model_path", ""),
+        "tts_api_url": g("tts.api_url", ""),
+        "tts_api_key": g("tts.api_key", ""),
+        "tts_api_model": g("tts.api_model", "tts-1"),
+        "tts_api_provider": g("tts.api_provider", "其他供应商"),
         "llm_mode": g("llm.mode", "api"),
+        "llm_local_model": g("llm.local_model", ""),
+        "llm_api_url": g("llm.api_url", ""),
+        "llm_api_key": g("llm.api_key", ""),
+        "llm_api_model": g("llm.api_model", ""),
+        "llm_api_provider": g("llm.api_provider", "其他供应商"),
+        "llm_framework": g("llm.framework", "llama.cpp"),
+        "llm_context": int(g("llm.context", "4096")),
+        "llm_device": g("llm.device", "CPU"),
         "character_name": g("pet.character", "小女仆"),
         "sound_source": g("pet.sound_source", ""),
+        "minimax_api_key": g("minimax.api_key", ""),
+        "minimax_voice_id": g("minimax.voice_id", ""),
         "personality": g("pet.personality", "温柔贴心"),
         "personality_prompt": g("pet.personality_prompt", ""),
         "user_title": g("pet.user_title", "龙之介大人"),
@@ -69,10 +84,26 @@ def cfg_to_db(user_id: int, cfg: dict):
         ("tts", "emotion", cfg.get("tts_emotion", "平静")),
         ("tts", "voice", cfg.get("tts_voice", "默认女声")),
         ("tts", "mode", cfg.get("tts_mode", "api")),
+        ("tts", "local_model_path", cfg.get("tts_local_model_path", "")),
+        ("tts", "api_url", cfg.get("tts_api_url", "")),
+        ("tts", "api_key", cfg.get("tts_api_key", "")),
+        ("tts", "api_model", cfg.get("tts_api_model", "tts-1")),
+        ("tts", "api_provider", cfg.get("tts_api_provider", "其他供应商")),
         ("voice", "lang", cfg.get("voice_lang", "auto")),
         ("bubble", "lang", cfg.get("bubble_lang", "auto")),
+        ("llm", "mode", cfg.get("llm_mode", "api")),
+        ("llm", "local_model", cfg.get("llm_local_model", "")),
+        ("llm", "api_url", cfg.get("llm_api_url", "")),
+        ("llm", "api_key", cfg.get("llm_api_key", "")),
+        ("llm", "api_model", cfg.get("llm_api_model", "")),
+        ("llm", "api_provider", cfg.get("llm_api_provider", "其他供应商")),
+        ("llm", "framework", cfg.get("llm_framework", "llama.cpp")),
+        ("llm", "context", str(cfg.get("llm_context", 4096))),
+        ("llm", "device", cfg.get("llm_device", "CPU")),
         ("pet", "character", cfg.get("character_name", "小女仆")),
         ("pet", "sound_source", cfg.get("sound_source", "")),
+        ("minimax", "api_key", cfg.get("minimax_api_key", "")),
+        ("minimax", "voice_id", cfg.get("minimax_voice_id", "")),
         ("pet", "personality", cfg.get("personality", "温柔贴心")),
         ("pet", "personality_prompt", cfg.get("personality_prompt", "")),
         ("pet", "user_title", cfg.get("user_title", "龙之介大人")),
@@ -403,6 +434,12 @@ class ConfigUI(QDialog):
         clone_row.addWidget(self.clone_path_edit)
         clone_row.addWidget(self.clone_browse_btn)
         g3_layout.addRow("参考音频:", clone_row)
+        self.minimax_key_edit = QLineEdit(self.cfg.get("minimax_api_key", ""))
+        self.minimax_key_edit.setPlaceholderText("MiniMax API Key (可选，留空用环境变量)")
+        g3_layout.addRow("MiniMax Key:", self.minimax_key_edit)
+        self.minimax_vid_edit = QLineEdit(self.cfg.get("minimax_voice_id", ""))
+        self.minimax_vid_edit.setPlaceholderText("克隆音色ID (可选，留空自动克隆)")
+        g3_layout.addRow("音色ID:", self.minimax_vid_edit)
         clone_info = QLabel("提示：选择一段目标人声的wav音频(建议5-30秒)，保存后语音播报将使用此音色克隆")
         clone_info.setStyleSheet("color: #999; font-size: 11px;")
         g3_layout.addRow("", clone_info)
@@ -539,6 +576,10 @@ class ConfigUI(QDialog):
         tts_api.setSpacing(12)
         self.tts_api_provider = QComboBox()
         self.tts_api_provider.addItems(["其他供应商", "Edge TTS"])
+        current_provider = self.cfg.get("tts_api_provider", "其他供应商")
+        idx = self.tts_api_provider.findText(current_provider)
+        if idx >= 0:
+            self.tts_api_provider.setCurrentIndex(idx)
         tts_api.addRow("Provider:", self.tts_api_provider)
         self.tts_api_url = QLineEdit(self.cfg.get("tts_api_url", ""))
         tts_api.addRow("API URL:", self.tts_api_url)
@@ -601,6 +642,10 @@ class ConfigUI(QDialog):
         llm_api.setSpacing(12)
         self.llm_api_provider = QComboBox()
         self.llm_api_provider.addItems(["其他供应商", "DeepSeek", "Ollama"])
+        current_llm_provider = self.cfg.get("llm_api_provider", "其他供应商")
+        idx = self.llm_api_provider.findText(current_llm_provider)
+        if idx >= 0:
+            self.llm_api_provider.setCurrentIndex(idx)
         llm_api.addRow("Provider:", self.llm_api_provider)
         self.llm_api_url = QLineEdit(self.cfg.get("llm_api_url", ""))
         llm_api.addRow("API URL:", self.llm_api_url)
@@ -889,6 +934,7 @@ class ConfigUI(QDialog):
 
     def _on_save(self):
         lang_map = {"自动检测": "auto", "中文": "zh", "日文": "ja", "英文": "en"}
+        lang_map = {"自动检测": "auto", "中文": "zh", "日文": "ja", "英文": "en"}
         self.cfg = {
             "astrbot_api_key": self.api_key.text().strip(),
             "astrbot_url": self.api_url.text().strip(),
@@ -899,10 +945,13 @@ class ConfigUI(QDialog):
             "voice_lang": lang_map.get(self.voice_lang_combo.currentText(), "auto"),
             "bubble_lang": lang_map.get(self.bubble_lang_combo.currentText(), "auto"),
             "tts_voice": self.tts_model_combo.currentText(),
-            "tts_mode": self.cfg.get("tts_mode", "api"),
+            "tts_api_provider": self.tts_api_provider.currentText() if hasattr(self, 'tts_api_provider') else "其他供应商",
+            "tts_mode": "local" if self.tts_local_radio.isChecked() else "api",
             "llm_mode": self.cfg.get("llm_mode", "api"),
             "character_name": self.cfg.get("character_name", "小女仆"),
             "sound_source": self.clone_path_edit.text().strip() if hasattr(self, 'clone_path_edit') else "",
+            "minimax_api_key": self.minimax_key_edit.text().strip() if hasattr(self, 'minimax_key_edit') else "",
+            "minimax_voice_id": self.minimax_vid_edit.text().strip() if hasattr(self, 'minimax_vid_edit') else "",
             "personality": self.personality_combo.currentText() if hasattr(self, 'personality_combo') else "温柔贴心",
             "personality_prompt": self.personality_prompt.text().strip() if hasattr(self, 'personality_prompt') else "",
             "user_title": self.user_title.text().strip() if hasattr(self, 'user_title') else "龙之介大人",

@@ -39,18 +39,24 @@ class BubbleWindow(QFrame):
         self._timer.timeout.connect(self.hide)
         self._parent_pos = QPoint(0, 0)
 
-    def show_text(self, text: str, duration_ms: int = 3000, parent_pos: QPoint = None):
-        # 根据语种切换字体
+    def show_text(self, text: str, duration_ms: int = 3000, parent_pos: QPoint = None, lang: str = "auto"):
+        """根据语种设置切换字体"""
         import re
-        if re.search(r'[\u3040-\u309f\u30a0-\u30ff]', text):
-            # 日文 → Yu Gothic UI
-            self.label.setFont(QFont('Yu Gothic UI', 11))
-        elif re.search(r'[\u4e00-\u9fff]', text):
-            # 中文 → Microsoft YaHei
+        # 根据 lang 参数选择字体
+        if lang == "zh":
             self.label.setFont(QFont('Microsoft YaHei', 11))
-        else:
-            # 英文 → Segoe UI
+        elif lang == "ja":
+            self.label.setFont(QFont('Yu Gothic UI', 11))
+        elif lang == "en":
             self.label.setFont(QFont('Segoe UI', 11))
+        else:
+            # auto: 根据文本内容检测
+            if re.search(r'[\u3040-\u309f\u30a0-\u30ff]', text):
+                self.label.setFont(QFont('Yu Gothic UI', 11))
+            elif re.search(r'[\u4e00-\u9fff]', text):
+                self.label.setFont(QFont('Microsoft YaHei', 11))
+            else:
+                self.label.setFont(QFont('Segoe UI', 11))
 
         self.label.setText(text)
         self.adjustSize()

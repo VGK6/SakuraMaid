@@ -10,8 +10,42 @@ UPLOAD_URL = "https://api.minimax.chat/v1/files/upload"
 
 _voice_id = "female-shaonv"  # 默认音色
 
+def _get_key() -> str:
+    """从数据库读取MiniMax API Key，环境变量作为后备"""
+    try:
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        from modules.database import get_conn
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT value FROM settings WHERE category='minimax' AND key='api_key' ORDER BY rowid DESC LIMIT 1")
+        r = c.fetchone()
+        conn.close()
+        if r and r[0]:
+            return r[0]
+    except:
+        pass
+    return os.environ.get("MINIMAX_API_KEY", "")
+
+def _get_voice_id() -> str:
+    """从数据库读取音色ID，环境变量作为后备"""
+    try:
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        from modules.database import get_conn
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT value FROM settings WHERE category='minimax' AND key='voice_id' ORDER BY rowid DESC LIMIT 1")
+        r = c.fetchone()
+        conn.close()
+        if r and r[0]:
+            return r[0]
+    except:
+        pass
+    return os.environ.get("MINIMAX_VOICE_ID", "")
+
 def is_available() -> bool:
-    return bool(os.environ.get("MINIMAX_API_KEY", ""))
+    return bool(_get_key())
 
 def _upload_file(file_path: str) -> str:
     """上传音频文件到MiniMax，返回file_id"""
@@ -32,7 +66,7 @@ def _upload_file(file_path: str) -> str:
     body_parts.append(f"--{boundary}--".encode())
     body_data = b"\r\n".join(body_parts)
     
-    key = os.environ.get("MINIMAX_API_KEY", "")
+    key = _get_key()
     req = urllib.request.Request(UPLOAD_URL, data=body_data,
         headers={"Authorization": f"Bearer {key}", "Content-Type": f"multipart/form-data; boundary={boundary}"},
         method="POST")
@@ -43,7 +77,7 @@ def _upload_file(file_path: str) -> str:
 def _clone_voice(file_id: str, voice_name: str = "小女仆") -> str:
     """用file_id克隆音色，返回voice_id"""
     global _voice_id
-    key = os.environ.get("MINIMAX_API_KEY", "")
+    key = _get_key()
     new_vid = "pet_" + str(uuid.uuid4()).replace('-', '')[:8]
     
     boundary = "----" + str(uuid.uuid4()).replace('-', '')
@@ -80,11 +114,11 @@ def _clone_voice(file_id: str, voice_name: str = "小女仆") -> str:
 def init(ref_audio: str = None):
     """启动时初始化：检测参考音频是否变更，必要时重新克隆"""
     global _voice_id
-    key = os.environ.get("MINIMAX_API_KEY", "")
+    key = _get_key()
     if not key:
         return
     
-    custom_id = os.environ.get("MINIMAX_VOICE_ID", "")
+    custom_id = os.environ.get("MINIMAX_VOICE_ID", "") or _get_voice_id()
     if custom_id:
         _voice_id = custom_id
         print(f"🎤 MiniMax: 使用环境变量音色 {_voice_id}")
@@ -155,18 +189,24 @@ def init(ref_audio: str = None):
     
     print(f"🎤 MiniMax: 使用默认音色 female-shaonv")
 
-def speak(text: str, ref_audio: str = None) -> bool:
-    """合成语音并播放"""
+def speak(text: str, ref_audio: str = None, lang: str = "auto") -> bool:
+    """合成语音并播放，lang: auto/zh/ja/en"""
     global _voice_id
-    key = os.environ.get("MINIMAX_API_KEY", "")
+    key = _get_key()
     if not key:
         return False
 
     try:
+        # 根据语言选择音色
+        voice_id = _voice_id or _get_voice_id() or "female-shaonv"
+        if lang == "ja":
+            # MiniMax不支持日语，回退到edge-tts
+            return False
+
         payload = {
             "model": "speech-01",
             "text": text,
-            "voice_id": _voice_id,
+            "voice_id": voice_id,
         }
         data = json.dumps(payload).encode()
         req = urllib.request.Request(API_URL, data=data,
@@ -175,12 +215,35 @@ def speak(text: str, ref_audio: str = None) -> bool:
         with urllib.request.urlopen(req, timeout=60) as resp:
             audio_data = resp.read()
         
+        # 校验：检查是否返回了有效音频
+        if audio_data.startswith(b'{'):
+            try:
+                err = json.loads(audio_data)
+                msg = err.get('base_resp', {}).get('status_msg', '未知错误')
+                print(f"MiniMax返回错误: {msg}")
+                return False
+            except:
+                pass
+        
+        if len(audio_data) < 100:
+            print(f"MiniMax返回数据过短({len(audio_data)}字节)，跳过")
+            return False
+        
         tmp = os.path.join(tempfile.gettempdir(), "minimax_tts.mp3")
         with open(tmp, "wb") as f:
             f.write(audio_data)
         
+        # 用pydub解码MP3为临时WAV
+        try:
+            from pydub import AudioSegment
+            wav_tmp = os.path.join(tempfile.gettempdir(), "minimax_tts.wav")
+            AudioSegment.from_mp3(tmp).export(wav_tmp, format="wav")
+        except Exception as e:
+            print(f"MiniMax MP3解码失败: {e}")
+            return False
+        
         import soundfile as sf, sounddevice as sd
-        d, sr = sf.read(tmp)
+        d, sr = sf.read(wav_tmp)
         sd.play(d, sr)
         sd.wait()
         return True

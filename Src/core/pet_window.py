@@ -166,6 +166,24 @@ class MaidPet(QWidget):
 
     # ── 交互 ──
 
+    def _get_bubble_lang(self) -> str:
+        """从数据库读取气泡语种设置"""
+        try:
+            from modules.database import get_conn
+            conn = get_conn()
+            c = conn.cursor()
+            c.execute("SELECT user_id FROM users ORDER BY last_login DESC LIMIT 1")
+            row = c.fetchone()
+            uid = row['user_id'] if row else 0
+            conn.close()
+            if uid:
+                from ui.config_ui import db_to_cfg
+                cfg = db_to_cfg(uid)
+                return cfg.get("bubble_lang", "auto")
+        except:
+            pass
+        return "auto"
+
     def _get_voice_lang(self) -> str:
         """从数据库读取最新的语音语种设置"""
         try:
@@ -228,7 +246,7 @@ class MaidPet(QWidget):
             self._bubble_win.hide()
             return
         self.bubble_text = text
-        self._bubble_win.show_text(text, duration, self.pos())
+        self._bubble_win.show_text(text, duration, self.pos(), lang=self._get_bubble_lang())
         QTimer.singleShot(duration, self._clear_bubble)
 
     def _clear_bubble(self):
@@ -316,7 +334,10 @@ class MaidPet(QWidget):
             c = conn.cursor()
             c.execute("SELECT user_id FROM users ORDER BY last_login DESC LIMIT 1")
             row = c.fetchone()
-            uid = row['user_id'] if row else 0
+            if not row:
+                c.execute("SELECT MIN(user_id) FROM users")
+                row = c.fetchone()
+            uid = row[0] if row else 0
             conn.close()
         except:
             pass
